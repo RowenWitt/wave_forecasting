@@ -1,6 +1,11 @@
 import cdsapi
 
-def download_era5_atmospheric(output_file='era5_atmo_2023q1.nc'):
+q1 = ['01', '02', '03']
+q2 = ['04', '05', '06']
+q3 = ['07', '08', '09']
+q4 = ['10', '11', '12']
+
+def download_era5_atmospheric(output_file='era5_atmo_2023.nc'):
     c = cdsapi.Client()
     
     c.retrieve(
@@ -13,7 +18,7 @@ def download_era5_atmospheric(output_file='era5_atmo_2023q1.nc'):
                 'mean_sea_level_pressure',
             ],
             'year': '2023',
-            'month': ['01', '02', '03'],
+            'month': ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'],
             'day': [f'{d:02d}' for d in range(1, 32)],
             'time': [f'{h:02d}:00' for h in range(0, 24, 6)],
             'area': [60, 120, 10, 240],  # North, West, South, East
@@ -23,7 +28,7 @@ def download_era5_atmospheric(output_file='era5_atmo_2023q1.nc'):
     )
 
 
-def download_era5_waves(output_file='era5_waves_2023q1.nc'):
+def download_era5_waves(output_file='era5_waves_2023.nc'):
     c = cdsapi.Client()
     
     c.retrieve(
@@ -39,7 +44,7 @@ def download_era5_waves(output_file='era5_waves_2023q1.nc'):
                 'mean_period_of_wind_waves',
             ],
             'year': '2023',
-            'month': ['01', '02', '03'],
+            'month': ['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'],
             'day': [f'{d:02d}' for d in range(1, 32)],
             'time': [f'{h:02d}:00' for h in range(0, 24, 6)],
             'area': [60, 120, 10, 240],
