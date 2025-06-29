@@ -1,0 +1,16 @@
+*.mp4
+*.jpg
+*.png
+*.json
+*.csv
+*.pth
+*.nc
+*.pdf
+.env
+video/*
+vit_video/*
+vit_frames/*
+vit_wave/test_label_runs/*
+*/__pycache__/*
+poetry.lock
+.DS_Store
