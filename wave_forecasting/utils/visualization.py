@@ -1,7 +1,12 @@
 # utils/visualization.py
 """Visualization utilities"""
+from typing import Dict, List
 import matplotlib.pyplot as plt
 import numpy as np
+import torch
+
+from data.datasets import MeshDataLoader
+from data.preprocessing import clean_features_for_training
 
 def visualize_predictions(model, mesh_loader: MeshDataLoader, edge_index: torch.Tensor,
                          edge_attr: torch.Tensor, time_idx: int = 0, save_path: str = None):

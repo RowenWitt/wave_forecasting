@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+from config.base import ModelConfig, TrainingConfig
+
 class WavePhysicsLoss(nn.Module):
     """Physics-informed loss function for wave prediction"""
     

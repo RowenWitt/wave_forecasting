@@ -34,7 +34,10 @@ class DataConfig:
             self.wave_vars = [
                 'significant_height_of_combined_wind_waves_and_swell',
                 'mean_wave_direction',
-                'mean_wave_period'
+                'mean_wave_period',
+                'significant_height_of_wind_waves',       
+                'mean_direction_of_wind_waves',           
+                'mean_period_of_wind_waves' 
             ]
 
 @dataclass 

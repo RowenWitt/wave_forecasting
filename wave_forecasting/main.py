@@ -3,16 +3,16 @@
 import os
 
 import torch
+from torch.utils.data import DataLoader
 
 from config.base import DataConfig, ExperimentConfig, MeshConfig, ModelConfig, TrainingConfig
-from experiments.download_data import ERA5Downloader
+from data.datasets import MeshDataLoader, SpatialWaveDataset
 from data.loaders import ERA5DataManager, GEBCODataManager
 from data.preprocessing import MultiResolutionInterpolator
+from experiments.download_data import ERA5Downloader
 from mesh.icosahedral import IcosahedralMesh
-from data.datasets import MeshDataLoader, SpatialWaveDataset
-from torch.utils.data import DataLoader
-from models.spatial import SpatialWaveGNN
 from mesh.connectivity import compute_regional_edges
+from models.spatial import SpatialWaveGNN
 
 def setup_experiment_directories():
     """Create necessary directories for experiments"""
@@ -37,7 +37,7 @@ def download_all_data():
     # Download ERA5 data
     print("🌊 Downloading ERA5 data...")
     downloader = ERA5Downloader(config)
-    downloader.download_multi_year(2023, 2023)  # Start with 2023
+    downloader.download_multi_year(2020, 2022)  # Start with 2023
     
     # Download GEBCO data
     print("🏔️  Downloading GEBCO data...")

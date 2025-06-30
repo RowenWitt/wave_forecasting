@@ -1,5 +1,7 @@
 # models/temporal.py
 """Temporal sequence models"""
+import torch.nn as nn
+from config.base import ModelConfig
 
 class TemporalWaveGNN(nn.Module):
     """GNN with temporal processing for multi-step forecasting"""

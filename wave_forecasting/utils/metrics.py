@@ -3,6 +3,7 @@
 import numpy as np
 import torch
 from typing import Dict, Tuple
+from torch.utils.data import DataLoader
 
 def calculate_wave_metrics(predictions: torch.Tensor, targets: torch.Tensor) -> Dict[str, float]:
     """Calculate wave-specific performance metrics"""

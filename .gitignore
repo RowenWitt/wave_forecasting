@@ -6,6 +6,9 @@
 *.pth
 *.nc
 *.pdf
+*.pt
+*.pyc
+*
 .env
 video/*
 vit_video/*

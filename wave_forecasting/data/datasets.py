@@ -1,8 +1,10 @@
 # data/datasets.py
 """PyTorch datasets for different training modes"""
 import torch
+import pickle
 from torch.utils.data import Dataset
 from typing import List, Dict, Tuple, Optional
+from pathlib import Path
 import numpy as np
 
 from config.base import DataConfig, ExperimentConfig
@@ -162,3 +164,93 @@ class TemporalWaveDataset(Dataset):
             'target': target_waves,  # [nodes, 3]
             'forecast_horizon': self.config.forecast_horizon
         }
+
+class ChunkedSpatialDataset:
+    """
+    Chunked dataset - ADD alongside existing SpatialWaveDataset
+    Existing SpatialWaveDataset remains unchanged!
+    """
+    
+    def __init__(self, era5_manager, gebco_manager, mesh_loader, years, 
+                 chunk_size_months=6, cache_dir="data/chunked_cache"):
+        self.era5_manager = era5_manager
+        self.gebco_manager = gebco_manager
+        self.mesh_loader = mesh_loader
+        self.years = years
+        self.chunk_size_months = chunk_size_months
+        self.cache_dir = Path(cache_dir)
+        self.cache_dir.mkdir(exist_ok=True)
+        
+        # Plan chunks
+        self.chunks = self._plan_chunks()
+        self.current_chunk = None
+        self.current_samples = []
+        
+        print(f"🧩 Chunked Dataset: {len(self.chunks)} chunks across {len(years)} years")
+    
+    def _plan_chunks(self):
+        chunks = []
+        for year in self.years:
+            for start_month in range(1, 13, self.chunk_size_months):
+                end_month = min(start_month + self.chunk_size_months - 1, 12)
+                chunk_id = f"{year}_m{start_month:02d}-{end_month:02d}"
+                chunks.append({
+                    'id': chunk_id,
+                    'year': year,
+                    'months': list(range(start_month, end_month + 1)),
+                    'cache_file': self.cache_dir / f"{chunk_id}.pkl"
+                })
+        return chunks
+    
+    def get_chunk_samples(self, chunk_idx):
+        if chunk_idx != self.current_chunk:
+            self._load_chunk(chunk_idx)
+        return self.current_samples
+    
+    def _load_chunk(self, chunk_idx):
+        chunk = self.chunks[chunk_idx]
+        
+        # Try cache first
+        if chunk['cache_file'].exists():
+            print(f"📦 Loading cached chunk: {chunk['id']}")
+            with open(chunk['cache_file'], 'rb') as f:
+                self.current_samples = pickle.load(f)
+                self.current_chunk = chunk_idx
+                return
+        
+        # Create chunk
+        print(f"🔄 Creating chunk: {chunk['id']}")
+        samples = []
+        
+        for month in chunk['months']:
+            try:
+                # Use EXISTING data loading approach
+                era5_atmo, era5_waves = self.era5_manager.load_month_data(chunk['year'], month)
+                gebco_data = self.gebco_manager.load_bathymetry()
+                
+                # Use EXISTING interpolator
+                from data.preprocessing import MultiResolutionInterpolator
+                interpolator = MultiResolutionInterpolator(era5_atmo, era5_waves, gebco_data, 
+                                                         self.mesh_loader.config)
+                
+                old_interpolator = self.mesh_loader.interpolator
+                self.mesh_loader.interpolator = interpolator
+                
+                # Use EXISTING dataset creation
+                month_dataset = SpatialWaveDataset(self.mesh_loader, num_timesteps=50)
+                samples.extend(month_dataset.samples)
+                
+                self.mesh_loader.interpolator = old_interpolator
+                
+                print(f"    Month {month:02d}: {len(month_dataset.samples)} samples")
+                
+            except Exception as e:
+                print(f"    ⚠️  Skipping {chunk['year']}-{month:02d}: {e}")
+        
+        # Cache it
+        with open(chunk['cache_file'], 'wb') as f:
+            pickle.dump(samples, f)
+        
+        self.current_samples = samples
+        self.current_chunk = chunk_idx
+        print(f"✅ Chunk {chunk['id']}: {len(samples)} samples cached")
