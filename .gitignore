@@ -8,9 +8,10 @@
 *.pdf
 *.pt
 *.pyc
-*
+*.pkl
 .env
 video/*
+models/*
 vit_video/*
 vit_frames/*
 vit_wave/test_label_runs/*

@@ -9,14 +9,28 @@ class SpatialWaveGNN(nn.Module):
     def __init__(self, config: ModelConfig):
         super().__init__()
         self.config = config
+                
+        # Get input features from config or infer from data
+        input_features = getattr(config, 'input_features', 11)  # Default to 11
         
-        # Encoder
-        self.encoder = nn.Sequential(
-            nn.Linear(config.hidden_dim, config.hidden_dim),  # Will be set properly in forward
-            nn.ReLU(),
-            nn.Linear(config.hidden_dim, config.hidden_dim)
-        )
+        # Build encoder with correct input size
+        layers = []
+        layers.append(nn.Linear(input_features, config.hidden_dim))  # ← FIXED
+        layers.append(nn.ReLU())
         
+        for _ in range(config.num_spatial_layers - 1):
+            layers.append(nn.Linear(config.hidden_dim, config.hidden_dim))
+            layers.append(nn.ReLU())
+            
+        self.encoder = nn.Sequential(*layers)
+
+        # # Encoder
+        # self.encoder = nn.Sequential(
+        #     nn.Linear(config.hidden_dim, config.hidden_dim),  # Will be set properly in forward
+        #     nn.ReLU(),
+        #     nn.Linear(config.hidden_dim, config.hidden_dim)
+        # )
+
         # Message passing layers
         self.message_layers = nn.ModuleList([
             WaveMessageLayer(config.hidden_dim, config.edge_features, config.hidden_dim)
