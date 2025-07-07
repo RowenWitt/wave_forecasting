@@ -19,6 +19,7 @@ import math
 from sklearn.preprocessing import StandardScaler
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional, Any
+import xarray as xr
 
 # Add project root to path
 sys.path.insert(0, str(Path.cwd()))
@@ -400,7 +401,25 @@ class SpatioTemporalTrainer:
         era5_manager = ERA5DataManager(data_config)
         gebco_manager = GEBCODataManager(data_config)
         
-        era5_atmo, era5_waves = era5_manager.load_month_data(2020, 1)
+        # era5_atmo, era5_waves = era5_manager.load_month_data(2020, 1)
+
+        # Multi-year (what you need):
+        all_atmo_data = []
+        all_wave_data = []
+
+        for year in [2019, 2020, 2021]:
+            for month in range(1, 13):  # All 12 months
+                try:
+                    atmo, waves = era5_manager.load_month_data(year, month)
+                    all_atmo_data.append(atmo)
+                    all_wave_data.append(waves)
+                except:
+                    print(f"Skipping {year}-{month:02d}")
+
+        # Concatenate all data
+        era5_atmo = xr.concat(all_atmo_data, dim='valid_time')
+        era5_waves = xr.concat(all_wave_data, dim='valid_time')
+
         gebco_data = gebco_manager.load_bathymetry()
         
         mesh = IcosahedralMesh(mesh_config)
