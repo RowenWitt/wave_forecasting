@@ -407,7 +407,7 @@ class SpatioTemporalTrainer:
         all_atmo_data = []
         all_wave_data = []
 
-        for year in [2019, 2020, 2021]:
+        for year in [2017, 2018, 2019, 2020, 2021, 2022]:
             for month in range(1, 13):  # All 12 months
                 try:
                     atmo, waves = era5_manager.load_month_data(year, month)
@@ -683,7 +683,7 @@ def main():
         use_temporal_attention=True,
         
         # Training
-        num_epochs=25,  # Shorter for testing
+        num_epochs=80,  # Shorter for testing
         batch_size=8,
         learning_rate=1e-4,
         
@@ -694,7 +694,7 @@ def main():
         
         # Curriculum learning
         start_with_single_step=True,
-        single_step_epochs=20,
+        single_step_epochs=80,
         
         # Data
         max_training_sequences=1000

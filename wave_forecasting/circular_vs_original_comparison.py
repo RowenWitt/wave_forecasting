@@ -66,7 +66,7 @@ def load_real_test_data():
         gebco_manager = GEBCODataManager(data_config)
         
         # Load February 2020 data (different from training month)
-        era5_atmo, era5_waves = era5_manager.load_month_data(2022, 2)
+        era5_atmo, era5_waves = era5_manager.load_month_data(2022, 12)
         gebco_data = gebco_manager.load_bathymetry()
         
         # Create mesh
