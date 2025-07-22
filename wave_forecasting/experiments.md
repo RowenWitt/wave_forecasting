@@ -98,13 +98,52 @@ Epoch  3/25: Total=18.3190, Val=7.5937, Physics=18.6097, Energy=508.1217, LR=6.3
 Epoch  4/25: Total=20.6751, Val=7.6816, Physics=33.9268, Energy=247.9518, LR=5.24e-05, Time=866.2s
 
 
-SpatioTemporal Circular - 80 epochs & 5 years of data
-Epoch 80/80: Total=0.9319, SWH=0.0722, MWD_circ=0.3384, MWD_ang=0.1479, MWP=0.0521, Time=40.6s
-✅ Month 1: Overall RMSE = 13.190 ± 0.665
-✅ Month 2: Overall RMSE = 12.696 ± 0.766
-✅ Month 3: Overall RMSE = 12.745 ± 0.775
+SpatioTemporal Circular - 80 epochs & 6 years of data
+- 320 hidden dim
 
-SpatioTemporal Circular - 20 epochs & 3 years of data
+📊 Performance Statistics:
+   Overall RMSE: 14.389 ± 1.247
+   SWH RMSE: 1.443 ± 0.241 m
+   MWD RMSE: 39.5 ± 3.8°
+   MWP RMSE: 2.179 ± 0.108 s
+
+📈 Performance Ranges:
+   Overall RMSE: [10.639, 17.796]
+   MWD RMSE: [27.9°, 49.8°]
+
+🌍 Seasonal Performance (Overall RMSE):
+   Winter: 14.731 ± 0.055
+   Spring: 14.528 ± 0.298
+   Summer: 13.402 ± 0.996
+   Fall: 14.895 ± 0.437
+
+
+
+- SpatioTemporal Circular - 80 epochs & 5 years of data
+Epoch 80/80: Total=0.9319, SWH=0.0722, MWD_circ=0.3384, MWD_ang=0.1479, MWP=0.0521, Time=40.6s
+
+📊 Performance Statistics:
+   Overall RMSE: 12.843 ± 1.115
+   SWH RMSE: 0.738 ± 0.134 m
+   MWD RMSE: 36.5 ± 3.3°
+   MWP RMSE: 1.259 ± 0.174 s
+
+📈 Performance Ranges:
+   Overall RMSE: [9.964, 17.263]
+   MWD RMSE: [28.0°, 49.8°]
+
+🌍 Seasonal Performance (Overall RMSE):
+   Winter: 12.964 ± 0.204
+   Spring: 12.548 ± 0.140
+   Summer: 12.727 ± 0.866
+   Fall: 13.132 ± 0.547
+
+🏆 Monthly Performance:
+   Best Month: 7 (RMSE: 11.691)
+   Worst Month: 6 (RMSE: 13.812)
+   Seasonal Variation: 2.120
+
+- SpatioTemporal Circular - 20 epochs & 3 years of data
 📊 Performance Statistics:
    Overall RMSE: 15.829 ± 1.418
    SWH RMSE: 0.800 ± 0.109 m
@@ -126,7 +165,7 @@ SpatioTemporal Circular - 20 epochs & 3 years of data
    Worst Month: 9 (RMSE: 17.070)
    Seasonal Variation: 3.411
 
-SpatioTemporal Circular - 40 epochs & 3 years of data
+- SpatioTemporal Circular - 40 epochs & 3 years of data
 📊 Performance Statistics:
    Overall RMSE: 12.405 ± 1.164
    SWH RMSE: 1.019 ± 0.139 m

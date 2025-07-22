@@ -30,11 +30,12 @@ from config.base import DataConfig, MeshConfig
 from circular_mwd_evaluator import CircularMWDEvaluator
 from mwd_circular_fixes import evaluate_model_with_circular_metrics, compute_circular_rmse
 from spatiotemporal_with_circular_mwd import SpatioTemporalConfig
+from variable_lr_spatiotemporal_with_circular_mwd import VariableLRConfig
 
 class AnnualEvaluator:
     """Comprehensive annual evaluation framework"""
     
-    def __init__(self, model_name: Optional[str] = None, test_year: int = 2022):
+    def __init__(self, model_name: Optional[str] = None, test_year: int = 2024):
         self.test_year = test_year
         self.model_name = model_name
         
@@ -92,14 +93,17 @@ class AnnualEvaluator:
         model_candidates = [
             latest_experiment / "spatiotemporal_circular_model.pt",
             latest_experiment / "best_model.pt",
+            latest_experiment / "best_variable_lr_model.pt",
             latest_experiment / "final_model.pt"
         ]
-        
+
         for model_path in model_candidates:
             if model_path.exists():
                 print(f"✅ Found model: {model_path}")
                 return model_path
         
+        print(model_candidates)
+
         print(f"❌ No model file found in {latest_experiment}")
         return None
     
@@ -692,8 +696,8 @@ def main():
     parser = argparse.ArgumentParser(description='Annual Wave Model Evaluation')
     parser.add_argument('--model_name', type=str, default=None,
                        help='Specific model name to evaluate (default: latest circular)')
-    parser.add_argument('--test_year', type=int, default=2022,
-                       help='Year to test against (default: 2022)')
+    parser.add_argument('--test_year', type=int, default=2024,
+                       help='Year to test against (default: 2024)')
     parser.add_argument('--samples_per_month', type=int, default=100,
                        help='Number of samples per month (default: 100)')
     

@@ -9,6 +9,7 @@
 *.pt
 *.pyc
 *.pkl
+*.zip
 .env
 video/*
 models/*
