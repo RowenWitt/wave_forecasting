@@ -1,0 +1,572 @@
+GLOBAL WAVE MODEL V3_1 hybrid Train log
+==================================================
+
+Timestamp: 2025-07-29T21:51:55.407489
+Model Type: MultiscaleGlobalWaveGNN_V3_HybridSampling
+
+Epoch 1/100
+   Learning rate: 5.00e-06 (warmup)
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [1.0312, 2.1804]
+      Mean loss: 1.4549
+   Train Loss: 5.8195
+   Val Loss: 2.4346
+   Val Loss by variable: SWH=1.4140, MWD=0.6704, MWP=0.3502
+   Time: 7271.7s (121.2 min)
+   💾 Saved: best_model.pt
+
+Epoch 2/100
+   Learning rate: 1.40e-05 (warmup)
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'summer': 50, 'fall': 51, 'winter': 51, 'spring': 48}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.7635, 1.3054]
+      Mean loss: 1.0163
+   Train Loss: 4.0650
+   Val Loss: 1.7384
+   Val Loss by variable: SWH=1.0038, MWD=0.4796, MWP=0.2550
+   Time: 7411.2s (123.5 min)
+   💾 Saved: best_model.pt
+
+Epoch 3/100
+   Learning rate: 2.30e-05 (warmup)
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'summer': 52, 'winter': 49, 'spring': 50, 'fall': 49}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.5275, 1.0616]
+      Mean loss: 0.7557
+   Train Loss: 3.0230
+   Val Loss: 1.1805
+   Val Loss by variable: SWH=0.6674, MWD=0.3728, MWP=0.1403
+   Time: 7688.8s (128.1 min)
+   💾 Saved: best_model.pt
+
+Epoch 4/100
+   Learning rate: 3.20e-05 (warmup)
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'spring': 49, 'winter': 49, 'fall': 50, 'summer': 52}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.4249, 0.7370]
+      Mean loss: 0.5581
+   Train Loss: 2.2323
+   Val Loss: 0.8534
+   Val Loss by variable: SWH=0.4387, MWD=0.3102, MWP=0.1046
+   Time: 7787.8s (129.8 min)
+   💾 Saved: best_model.pt
+
+Epoch 5/100
+   Learning rate: 4.10e-05 (warmup)
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'winter': 50, 'fall': 52, 'spring': 49, 'summer': 49}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.3545, 0.6084]
+      Mean loss: 0.4590
+   Train Loss: 1.8360
+   Val Loss: 0.7680
+   Val Loss by variable: SWH=0.3930, MWD=0.2816, MWP=0.0935
+   Time: 7906.7s (131.8 min)
+   💾 Saved: best_model.pt
+
+Epoch 6/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'winter': 49, 'spring': 50, 'fall': 49, 'summer': 52}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.3155, 0.5667]
+      Mean loss: 0.4017
+   Train Loss: 1.6066
+   Val Loss: 0.7101
+   Val Loss by variable: SWH=0.3597, MWD=0.2591, MWP=0.0913
+   Time: 8774.8s (146.2 min)
+   💾 Saved: best_model.pt
+
+Epoch 7/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'summer': 50, 'fall': 49, 'spring': 48, 'winter': 53}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.3029, 0.4573]
+      Mean loss: 0.3617
+   Train Loss: 1.4467
+   Val Loss: 0.7122
+   Val Loss by variable: SWH=0.3461, MWD=0.2621, MWP=0.1040
+   Time: 8400.2s (140.0 min)
+
+Epoch 8/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'summer': 51, 'fall': 50, 'winter': 50, 'spring': 49}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2875, 0.4663]
+      Mean loss: 0.3446
+   Train Loss: 1.3785
+   Val Loss: 0.6405
+   Val Loss by variable: SWH=0.3008, MWD=0.2457, MWP=0.0941
+   Time: 7923.4s (132.1 min)
+   💾 Saved: best_model.pt
+
+Epoch 9/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'spring': 50, 'summer': 52, 'fall': 48, 'winter': 50}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2660, 0.4212]
+      Mean loss: 0.3270
+   Train Loss: 1.3082
+   Val Loss: 0.5727
+   Val Loss by variable: SWH=0.2642, MWD=0.2291, MWP=0.0794
+   Time: 8143.4s (135.7 min)
+   💾 Saved: best_model.pt
+
+Epoch 10/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'spring': 50, 'summer': 49, 'winter': 51, 'fall': 50}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2609, 0.3627]
+      Mean loss: 0.3107
+   Train Loss: 1.2427
+   Val Loss: 0.5713
+   Val Loss by variable: SWH=0.2661, MWD=0.2217, MWP=0.0835
+   Time: 7641.4s (127.4 min)
+   💾 Saved: best_model.pt
+   💾 Saved: checkpoint_epoch_10.pt
+
+Epoch 11/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'fall': 50, 'summer': 50, 'winter': 50, 'spring': 50}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2585, 0.3715]
+      Mean loss: 0.3019
+   Train Loss: 1.2077
+   Val Loss: 0.5207
+   Val Loss by variable: SWH=0.2384, MWD=0.2067, MWP=0.0755
+   Time: 8691.9s (144.9 min)
+   💾 Saved: best_model.pt
+
+Epoch 12/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'fall': 50, 'winter': 51, 'summer': 49, 'spring': 50}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2427, 0.3425]
+      Mean loss: 0.2896
+   Train Loss: 1.1585
+   Val Loss: 0.5505
+   Val Loss by variable: SWH=0.2668, MWD=0.2080, MWP=0.0757
+   Time: 8623.1s (143.7 min)
+
+Epoch 13/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'summer': 50, 'winter': 49, 'spring': 51, 'fall': 50}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2232, 0.3488]
+      Mean loss: 0.2833
+   Train Loss: 1.1331
+   Val Loss: 0.5214
+   Val Loss by variable: SWH=0.2482, MWD=0.1995, MWP=0.0737
+   Time: 8237.3s (137.3 min)
+
+Epoch 14/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'fall': 49, 'spring': 49, 'summer': 52, 'winter': 50}
+
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2333, 0.3282]
+      Mean loss: 0.2751
+   Train Loss: 1.1005
+   Val Loss: 0.4810
+   Val Loss by variable: SWH=0.2187, MWD=0.1944, MWP=0.0679
+   Time: 8279.9s (138.0 min)
+   💾 Saved: best_model.pt
+
+Epoch 15/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'winter': 50, 'spring': 52, 'fall': 49, 'summer': 49}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2341, 0.3064]
+      Mean loss: 0.2644
+   Train Loss: 1.0576
+   Val Loss: 0.4914
+   Val Loss by variable: SWH=0.2288, MWD=0.1920, MWP=0.0706
+   Time: 8894.6s (148.2 min)
+
+Epoch 16/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'spring': 50, 'summer': 50, 'fall': 50, 'winter': 50}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2170, 0.3212]
+      Mean loss: 0.2628
+   Train Loss: 1.0511
+   Val Loss: 0.4721
+   Val Loss by variable: SWH=0.2121, MWD=0.1881, MWP=0.0720
+   Time: 8314.9s (138.6 min)
+   💾 Saved: best_model.pt
+
+Epoch 17/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'summer': 50, 'fall': 51, 'spring': 48, 'winter': 51}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2168, 0.3100]
+      Mean loss: 0.2571
+
+   Train Loss: 1.0283
+   Val Loss: 0.4524
+   Val Loss by variable: SWH=0.2081, MWD=0.1805, MWP=0.0638
+   Time: 8945.8s (149.1 min)
+   💾 Saved: best_model.pt
+
+Epoch 18/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'winter': 51, 'summer': 50, 'spring': 49, 'fall': 50}
+
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2164, 0.2954]
+      Mean loss: 0.2525
+   Train Loss: 1.0100
+   Val Loss: 0.4671
+   Val Loss by variable: SWH=0.2252, MWD=0.1776, MWP=0.0643
+   Time: 8139.5s (135.7 min)
+
+Epoch 19/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'winter': 50, 'summer': 51, 'spring': 50, 'fall': 49}
+
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2058, 0.2945]
+      Mean loss: 0.2432
+   Train Loss: 0.9728
+   Val Loss: 0.4621
+   Val Loss by variable: SWH=0.2278, MWD=0.1732, MWP=0.0611
+   Time: 8058.9s (134.3 min)
+
+Epoch 20/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'spring': 51, 'fall': 51, 'summer': 49, 'winter': 49}
+
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2022, 0.3026]
+      Mean loss: 0.2381
+   Train Loss: 0.9522
+   Val Loss: 0.4492
+   Val Loss by variable: SWH=0.2175, MWD=0.1707, MWP=0.0610
+   Time: 8026.7s (133.8 min)
+   💾 Saved: best_model.pt
+   💾 Saved: checkpoint_epoch_20.pt
+
+Epoch 21/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'summer': 49, 'winter': 48, 'fall': 52, 'spring': 51}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.1984, 0.2802]
+      Mean loss: 0.2344
+   Train Loss: 0.9378
+   Val Loss: 0.4070
+   Val Loss by variable: SWH=0.1892, MWD=0.1601, MWP=0.0577
+   Time: 9035.8s (150.6 min)
+
+Epoch 22/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'summer': 51, 'winter': 49, 'spring': 51, 'fall': 49}
+
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.2028, 0.2707]
+      Mean loss: 0.2317
+   Train Loss: 0.9270
+   Val Loss: 0.4400
+   Val Loss by variable: SWH=0.2055, MWD=0.1704, MWP=0.0642
+   Time: 8960.6s (149.3 min)
+
+Epoch 23/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'winter': 51, 'spring': 49, 'summer': 49, 'fall': 51}
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.1939, 0.2748]
+      Mean loss: 0.2243
+   Train Loss: 0.8972
+   Val Loss: 0.4133
+   Val Loss by variable: SWH=0.1999, MWD=0.1583, MWP=0.0551
+   Time: 8383.7s (139.7 min)
+
+Epoch 24/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'spring': 50, 'winter': 48, 'fall': 51, 'summer': 51}
+
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.1907, 0.2904]
+      Mean loss: 0.2268
+   Train Loss: 0.9073
+   Val Loss: 0.4172
+   Val Loss by variable: SWH=0.1972, MWD=0.1607, MWP=0.0593
+   Time: 8378.3s (139.6 min)
+
+Epoch 25/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'spring': 49, 'winter': 52, 'summer': 49, 'fall': 50}
+
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.1879, 0.2756]
+      Mean loss: 0.2198
+   Train Loss: 0.8792
+   Val Loss: 0.4375
+   Val Loss by variable: SWH=0.2186, MWD=0.1610, MWP=0.0579
+   Time: 8378.6s (139.6 min)
+
+Epoch 26/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'spring': 49, 'summer': 51, 'fall': 49, 'winter': 51}
+
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.1813, 0.2625]
+      Mean loss: 0.2136
+   Train Loss: 0.8543
+   Val Loss: 0.4503
+   Val Loss by variable: SWH=0.2325, MWD=0.1624, MWP=0.0555
+   Time: 8219.4s (137.0 min)
+
+Epoch 27/100
+
+🎲 Resampling epoch data...
+   Sampled 200 sequences
+   Seasonal distribution: {'spring': 50, 'fall': 51, 'summer': 50, 'winter': 49}
+
+   🔍 Epoch diagnostic summary:
+      Total batches: 100
+      Valid batches: 100
+      NaN after norm: 0
+      Inf after norm: 0
+      NaN predictions: 0
+      NaN losses: 0
+      Inf losses: 0
+      Loss range: [0.1818, 0.2467]
+      Mean loss: 0.2091
+   Train Loss: 0.8363
+   Val Loss: 0.3861
+   Val Loss by variable: SWH=0.1902, MWD=0.1474, MWP=0.0485
+   Time: 7916.7s (131.9 min)
+   💾 Saved: best_model.pt

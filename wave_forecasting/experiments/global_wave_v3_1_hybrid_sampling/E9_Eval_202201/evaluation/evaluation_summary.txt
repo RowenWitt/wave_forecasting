@@ -1,0 +1,61 @@
+GLOBAL WAVE MODEL V3 EVALUATION REPORT
+==================================================
+
+Timestamp: 2025-07-28T20:12:41.652406
+Model Type: MultiscaleGlobalWaveGNN_V3_HybridSampling
+Checkpoint: experiments/global_wave_v3_1_hybrid_sampling/E9.pt
+Data Files: 1
+
+GLOBAL METRICS
+------------------------------
+
+SWH:
+  mae: 1.6127
+  rmse: 1.9177
+  bias: -1.6049
+  std_error: 1.0497
+  correlation: 0.7317
+  n_valid: 644550.0000
+  mape: 76.3566
+  nrmse: 90.7962
+
+MWD:
+  mae: 52.1822
+  rmse: 69.9864
+  correlation: 0.5518
+  n_valid: 644550.0000
+
+MWP:
+  mae: 6.1148
+  rmse: 6.4335
+  bias: -6.0847
+  std_error: 2.0894
+  correlation: 0.5410
+  n_valid: 644550.0000
+  mape: 77.4229
+  nrmse: 81.4574
+
+
+REGIONAL PERFORMANCE (Top 5 per variable)
+------------------------------
+
+SWH - Best Regions:
+  1. Tropics: RMSE=0.7751, MAE=0.4823
+  2. South Pacific: RMSE=0.7959, MAE=0.4114
+  3. Tropical Atlantic: RMSE=0.8145, MAE=0.5283
+  4. Tropical Pacific: RMSE=0.8203, MAE=0.4957
+  5. High-Latitudes North: RMSE=0.8593, MAE=0.3138
+
+MWD - Best Regions:
+  1. High-Latitudes North: RMSE=25.8995, MAE=12.8022
+  2. Southern Ocean: RMSE=27.0349, MAE=16.4252
+  3. Mid-Latitudes North: RMSE=28.6382, MAE=14.8465
+  4. South Pacific: RMSE=28.8426, MAE=16.1992
+  5. High-Latitudes South: RMSE=29.2998, MAE=15.7296
+
+MWP - Best Regions:
+  1. High-Latitudes North: RMSE=1.9465, MAE=1.0564
+  2. Arctic Ocean: RMSE=2.1429, MAE=1.2150
+  3. Mid-Latitudes North: RMSE=2.6788, MAE=1.4980
+  4. South Pacific: RMSE=3.0426, MAE=1.7305
+  5. Mediterranean: RMSE=3.0691, MAE=2.3456

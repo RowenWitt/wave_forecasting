@@ -1,3 +1,49 @@
+For recent global model, tried a few things architecture wise
+- single scale mesh
+- multiscale mesh
+- cuboid attention (further investigation needed)
+- GNN -> Transformer -> LSTM -> MLP (current approach)
+
+Then a few things model data logistics wise
+- pre-interpolation to zarr format
+- dynamic batch creation from that zarr data
+   - Next attempt, just generate epoch indexes -> batch indexes -> sample batch indexes directly in block reads based on apparent continuous subsequences (1 epoch = ~.6 total data) 
+   - Can still sample regions and seasons intentionally, even with index 
+- this was all frustrating enough to pivot from, but there's room for improvement.  Model architecture is the biggest component, this is a close second for speeding up train for selected model
+
+Things to do
+- Benchmark earthformer, maybe other models
+- Make toy MOE model
+- Benchmark GNN layer delete
+- Becnhmark Transformer layer delete
+- Benchmark different sparsity strategies for transfomer
+- Benchmark different aggregation strategies for GNN
+
+I think ideally it'd be 
+- mutlilayer GNN, high resolution (3+ layers)
+- sparse transformer (local neighbor circle for each layer res (can still be efficient?))
+- Temporal / LSTM component
+- MLP (?)
+
+Which is kind of current approach.  Maybe adding physics dimensions on multilayer mesh, or using physics constrained aggregation functions on nodes?
+
+Would also be interesting to do some MOE type approach.
+
+Maybe one of the following, not sure if MOE likes in terms of distance from input
+- GNN
+- MOE
+
+and 
+- GNN 
+- Transformer
+- MOE
+
+
+
+
+----------------------------------
+Early Global Model Stuff Below
+--------------------------------
 Model Performance
 
 
@@ -117,6 +163,41 @@ SpatioTemporal Circular - 80 epochs & 6 years of data
    Summer: 13.402 ± 0.996
    Fall: 14.895 ± 0.437
 
+
+📊 Evaluation plots saved: experiments/spatiotemporal_circular_20250708_131633/evaluation_20250708_142917/annual_evaluation_plots.png
+
+🎯 ANNUAL EVALUATION SUMMARY - 2024
+============================================================
+📋 Evaluation Details:
+   Model: spatiotemporal_circular_model.pt
+   Total Samples: 1,200
+   Months Evaluated: 12/12
+   Evaluation Time: 1684.1 seconds
+
+📊 Performance Statistics:
+   Overall RMSE: 11.501 ± 1.003
+   SWH RMSE: 1.184 ± 0.236 m
+   MWD RMSE: 32.0 ± 3.2°
+   MWP RMSE: 1.289 ± 0.138 s
+
+📈 Performance Ranges:
+   Overall RMSE: [8.342, 14.494]
+   MWD RMSE: [21.8°, 40.8°]
+
+🌍 Seasonal Performance (Overall RMSE):
+   Winter: 11.925 ± 0.068
+   Spring: 11.546 ± 0.376
+   Summer: 10.832 ± 0.723
+   Fall: 11.702 ± 0.288
+
+🏆 Monthly Performance:
+   Best Month: 7 (RMSE: 9.847)
+   Worst Month: 11 (RMSE: 12.039)
+   Seasonal Variation: 2.192
+
+🎯 Performance Assessment:
+   📈 PROMISING: Overall RMSE < 20.0 (Good baseline)
+   ✅ GOOD MWD: < 50° (Strong directional accuracy)
 
 
 - SpatioTemporal Circular - 80 epochs & 5 years of data

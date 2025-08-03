@@ -30,6 +30,12 @@ from torch.utils.data import Dataset, DataLoader, random_split, Sampler
 import xarray as xr
 from sklearn.preprocessing import StandardScaler, RobustScaler
 import matplotlib.pyplot as plt
+# from bathymetry_model_dual_purpose import integrate_bathymetry_with_dataset
+# from bathymetry_enabled_dataset import BathymetryEnabledHybridSamplingDataset
+from bathymetry_model_dual_purpose import DualPurposeBathymetry
+
+
+
 
 warnings.filterwarnings('ignore')
 
@@ -44,23 +50,23 @@ class HybridSamplingConfig:
     # Data paths - now supports multiple files
     data_pattern: str = "data/v1_global/processed/v1_era5_2021*.nc"  # Glob pattern
     cache_dir: str = "cache/global_mesh_hybrid"
-    output_dir: str = "experiments/global_wave_v1_hybrid_sampling"
+    output_dir: str = "experiments/global_wave_v3_1_hybrid_sampling"
     
     # Geographic coverage (global)
     lat_bounds: tuple = (-90.0, 90.0)
     lon_bounds: tuple = (0.0, 360.0)
     
     # Mesh parameters
-    mesh_refinement_level: int = 6  # ~40k nodes globally
+    mesh_refinement_level: int = 5  # ~40k nodes globally
     max_edge_distance_km: float = 500.0
     
     # Multiscale edge parameters
-    use_multiscale_edges: bool = True
+    use_multiscale_edges: bool = False
     medium_edge_distance_km: float = 1000.0
     long_edge_distance_km: float = 2000.0
     
     # Sampling parameters (NEW)
-    samples_per_epoch: int = 2000  # ~90 min epochs
+    samples_per_epoch: int = 200  # ~90 min epochs
     min_samples_per_month: int = 100  # Ensure monthly coverage
     hard_region_boost_factor: float = 2.0  # Oversample difficult regions
     seasonal_balance: bool = True  # Ensure seasonal diversity
@@ -91,7 +97,7 @@ class HybridSamplingConfig:
     dropout: float = 0.15
     
     # Training parameters
-    batch_size: int = 4  # Slightly larger for diversity
+    batch_size: int = 2  # Slightly larger for diversity
     accumulation_steps: int = 2  # Effective batch size of 8
     num_epochs: int = 100
     base_learning_rate: float = 5e-5  # Reduced from 1e-4 for stability
@@ -114,7 +120,7 @@ class HybridSamplingConfig:
 # ==============================================================================
 # HYBRID SAMPLING DATASET
 # ==============================================================================
-
+# @integrate_bathymetry_with_dataset
 class HybridSamplingDataset(Dataset):
     """
     Multi-month dataset with smart sampling strategies:
@@ -475,6 +481,153 @@ class HybridSamplingDataset(Dataset):
         self._resample_epoch()
 
 # ==============================================================================
+# BathymetryEnabledHybridSampling SAMPLING DATASET
+# ==============================================================================
+# @integrate_bathymetry_with_dataset
+class BathymetryEnabledHybridSamplingDataset(HybridSamplingDataset):
+    """
+    HybridSamplingDataset with integrated bathymetry support
+    Extends the base class to add ocean masking and proper depth features
+    """
+    
+    def __init__(self, data_paths: List[str], mesh, config, gebco_path: str = None):
+        """
+        Initialize dataset with optional bathymetry support
+        
+        Args:
+            data_paths: List of data file paths
+            mesh: Icosahedral mesh object
+            config: HybridSamplingConfig
+            gebco_path: Path to GEBCO bathymetry file (optional)
+        """
+        # Initialize parent class first
+        super().__init__(data_paths, mesh, config)
+        
+        # Add bathymetry support if path provided
+        if gebco_path:
+            print("\n🌊 Initializing bathymetry support...")
+            
+            # Create dual-purpose bathymetry handler
+            self.bathymetry = DualPurposeBathymetry(
+                gebco_path=gebco_path,
+                cache_dir=f"cache/bathymetry_dual/{Path(config.output_dir).name}",
+                resolution=0.1,
+                ocean_threshold=-10.0,
+                max_depth=5000.0,
+                normalize_depth=True
+            )
+            
+            # Get bathymetry data for mesh
+            bath_data = self.bathymetry.get_mesh_bathymetry(self.mesh)
+            self.ocean_mask = bath_data['mask']
+            self.mesh_bathymetry = bath_data['normalized_depth']
+            
+            print(f"🌊 Bathymetry integrated: mask + feature")
+            print(f"   Ocean nodes: {self.ocean_mask.sum():,}/{len(self.ocean_mask):,}")
+        else:
+            print("⚠️  No GEBCO path provided - using data-based ocean detection")
+            self.ocean_mask = None
+            self.mesh_bathymetry = None
+            self.bathymetry = None
+    
+    def _interpolate_to_mesh(self, field_data: np.ndarray, 
+                            variable_name: Optional[str] = None,
+                            is_ocean_variable: bool = False) -> np.ndarray:
+        """
+        Enhanced interpolation with ocean mask support
+        
+        Args:
+            field_data: Regular grid data to interpolate
+            variable_name: Name of the variable (for special handling)
+            is_ocean_variable: Whether this is an ocean-only variable
+            
+        Returns:
+            Interpolated data on mesh nodes
+        """
+        # Special handling for ocean_depth - use pre-computed bathymetry
+        if variable_name == 'ocean_depth' and self.mesh_bathymetry is not None:
+            return self.mesh_bathymetry
+        
+        # Regular interpolation using parent method
+        if hasattr(super(), '_interpolate_to_mesh'):
+            # Check if parent expects is_ocean_variable parameter
+            import inspect
+            parent_sig = inspect.signature(super()._interpolate_to_mesh)
+            if 'is_ocean_variable' in parent_sig.parameters:
+                interpolated = super()._interpolate_to_mesh(field_data, is_ocean_variable=is_ocean_variable)
+            else:
+                interpolated = super()._interpolate_to_mesh(field_data)
+        else:
+            # Fallback if parent doesn't have the method
+            raise NotImplementedError("Parent class must implement _interpolate_to_mesh")
+        
+        # Apply ocean mask for ocean variables
+        if self.ocean_mask is not None and (is_ocean_variable or 
+            variable_name in ['swh', 'mwd', 'mwp', 'shww', 'sst']):
+            # Zero out land nodes
+            interpolated[~self.ocean_mask] = 0.0
+        
+        return interpolated
+    
+    def __getitem__(self, idx):
+        """
+        Get a sample with enhanced bathymetry support
+        """
+        # Get base sample from parent
+        sample = super().__getitem__(idx)
+        
+        # If we have bathymetry, replace the ocean_depth feature
+        if self.mesh_bathymetry is not None and 'ocean_depth' in self.config.input_features:
+            depth_idx = self.config.input_features.index('ocean_depth')
+            
+            # Replace with proper bathymetry for all timesteps
+            for t in range(sample['input'].shape[0]):
+                sample['input'][t, :, depth_idx] = torch.tensor(
+                    self.mesh_bathymetry, 
+                    dtype=torch.float32
+                )
+        
+        return sample
+    
+    def get_ocean_statistics(self) -> Dict[str, float]:
+        """
+        Get statistics about ocean coverage
+        
+        Returns:
+            Dictionary with ocean statistics
+        """
+        if self.ocean_mask is None:
+            return {"ocean_percentage": 0.0, "ocean_nodes": 0, "total_nodes": 0}
+        
+        ocean_nodes = int(self.ocean_mask.sum())
+        total_nodes = len(self.ocean_mask)
+        ocean_percentage = ocean_nodes / total_nodes * 100
+        
+        return {
+            "ocean_percentage": ocean_percentage,
+            "ocean_nodes": ocean_nodes,
+            "total_nodes": total_nodes,
+            "mean_depth": float(self.mesh_bathymetry[self.ocean_mask].mean()) if ocean_nodes > 0 else 0.0,
+            "max_depth": float(self.mesh_bathymetry.max())
+        }
+
+
+# For backward compatibility - direct usage without decorator
+def create_bathymetry_enabled_dataset(data_paths: List[str], mesh, config, gebco_path: str = None):
+    """
+    Factory function to create bathymetry-enabled dataset
+    
+    This replaces the decorator pattern with a simple factory function
+    """
+    return BathymetryEnabledHybridSamplingDataset(
+        data_paths=data_paths,
+        mesh=mesh,
+        config=config,
+        gebco_path=gebco_path
+    )
+
+
+# ==============================================================================
 # CUSTOM SAMPLER FOR BATCH DIVERSITY
 # ==============================================================================
 
@@ -485,37 +638,70 @@ class DiverseBatchSampler(Sampler):
         self.dataset = dataset
         self.batch_size = batch_size
         
+        # Make sure epoch_samples exist
+        if not hasattr(dataset, 'epoch_samples') or len(dataset.epoch_samples) == 0:
+            raise ValueError("Dataset must have epoch_samples initialized. Call dataset._resample_epoch() first.")
+        
+        self._prepare_season_groups()
+    
+    def _prepare_season_groups(self):
+        """Prepare season groups from current epoch samples"""
         # Group samples by season
         self.season_groups = {'winter': [], 'spring': [], 'summer': [], 'fall': []}
-        for i, sample in enumerate(dataset.epoch_samples):
-            self.season_groups[sample['season']].append(i)
+        
+        for i, sample in enumerate(self.dataset.epoch_samples):
+            season = sample.get('season', 'winter')  # Default to winter if missing
+            self.season_groups[season].append(i)
+        
+        # Remove empty seasons
+        self.season_groups = {k: v for k, v in self.season_groups.items() if len(v) > 0}
+        
+        # Debug info
+        print(f"   DiverseBatchSampler initialized:")
+        for season, indices in self.season_groups.items():
+            print(f"      {season}: {len(indices)} samples")
     
     def __iter__(self):
-        # Create batches with seasonal diversity
-        indices = []
+        # Make copies of season groups to modify
+        available_samples = {season: list(indices) for season, indices in self.season_groups.items()}
         
-        while any(len(group) > 0 for group in self.season_groups.values()):
+        # Shuffle within each season
+        for season_indices in available_samples.values():
+            np.random.shuffle(season_indices)
+        
+        # Generate batches
+        while sum(len(indices) for indices in available_samples.values()) >= self.batch_size:
             batch = []
             
-            # Try to get one from each season
-            for season in ['winter', 'spring', 'summer', 'fall']:
-                if self.season_groups[season] and len(batch) < self.batch_size:
-                    idx = self.season_groups[season].pop(0)
-                    batch.append(idx)
+            # Try to get one sample from each season
+            seasons = list(available_samples.keys())
+            np.random.shuffle(seasons)  # Randomize season order
             
-            # Fill remainder randomly
-            all_remaining = []
-            for group in self.season_groups.values():
-                all_remaining.extend(group)
+            for season in seasons:
+                if available_samples[season] and len(batch) < self.batch_size:
+                    batch.append(available_samples[season].pop())
             
-            while len(batch) < self.batch_size and all_remaining:
-                idx = all_remaining.pop(np.random.randint(len(all_remaining)))
-                batch.append(idx)
+            # Fill remaining slots randomly
+            if len(batch) < self.batch_size:
+                # Collect all remaining indices
+                all_remaining = []
+                for indices in available_samples.values():
+                    all_remaining.extend(indices)
+                
+                # Shuffle and take what we need
+                np.random.shuffle(all_remaining)
+                needed = self.batch_size - len(batch)
+                batch.extend(all_remaining[:needed])
+                
+                # Remove used indices
+                for idx in all_remaining[:needed]:
+                    for season_indices in available_samples.values():
+                        if idx in season_indices:
+                            season_indices.remove(idx)
+                            break
             
-            if batch:
-                indices.extend(batch)
-        
-        return iter(indices)
+            if len(batch) == self.batch_size:
+                yield batch
     
     def __len__(self):
         return len(self.dataset) // self.batch_size
@@ -1206,6 +1392,46 @@ class CircularLoss(nn.Module):
 # ==============================================================================
 # TRAINING WITH HYBRID SAMPLING
 # ==============================================================================
+def diagnose_dataloader(train_loader, dataset):
+    """Diagnose why DataLoader isn't producing batches"""
+    print("\n🔍 DataLoader Diagnostic:")
+    print(f"   Dataset length: {len(dataset)}")
+    print(f"   DataLoader batch_size setting: {train_loader.batch_size}")
+    print(f"   DataLoader num_workers: {train_loader.num_workers}")
+    
+    # Check if using custom sampler
+    if hasattr(train_loader, 'batch_sampler') and train_loader.batch_sampler is not None:
+        print(f"   Using batch_sampler: {type(train_loader.batch_sampler).__name__}")
+        try:
+            sampler_len = len(train_loader.batch_sampler)
+            print(f"   Batch sampler length: {sampler_len}")
+        except:
+            print(f"   ⚠️  Cannot get batch sampler length")
+    
+    # Try to get one batch manually
+    print("\n   Attempting to get first batch manually...")
+    try:
+        # Direct access to dataset
+        print(f"   Getting item 0 from dataset...")
+        item = dataset[0]
+        print(f"   ✓ Dataset[0] works: input shape = {item['input'].shape}")
+        
+        # Try iterator
+        print(f"   Creating iterator...")
+        loader_iter = iter(train_loader)
+        print(f"   ✓ Iterator created")
+        
+        print(f"   Getting next batch...")
+        batch = next(loader_iter)
+        print(f"   ✓ Got batch! Input shape = {batch['input'].shape}")
+        
+    except StopIteration:
+        print(f"   ❌ StopIteration - iterator is empty")
+    except Exception as e:
+        print(f"   ❌ Error: {type(e).__name__}: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 class HybridSamplingTrainer:
     """Trainer for global wave prediction with hybrid sampling"""
@@ -1230,7 +1456,7 @@ class HybridSamplingTrainer:
         self.output_dir.mkdir(parents=True, exist_ok=True)
         
         # Normalizers
-        self.feature_normalizer = StandardScaler()
+        self.feature_normalizer = RobustScaler()
         self.target_normalizer = VariableSpecificNormalizer()
         
         # Training history
@@ -1271,11 +1497,11 @@ class HybridSamplingTrainer:
         self.edge_index = self.edge_index.to(self.device)
         self.edge_attr = self.edge_attr.to(self.device)
         
-        # Create hybrid sampling dataset
-        self.dataset = HybridSamplingDataset(
+        self.dataset = BathymetryEnabledHybridSamplingDataset(
             data_paths=data_files,
             mesh=self.mesh,
-            config=self.config
+            config=self.config,
+            gebco_path="data/gebco/GEBCO_2023.nc"
         )
         
         # Fit normalizers
@@ -1290,13 +1516,40 @@ class HybridSamplingTrainer:
         # For validation, we'll use a fixed subset
         self.val_indices = list(range(0, len(self.dataset), len(self.dataset) // val_size))[:val_size]
         
+
+        
+        # self.train_loader = DataLoader(
+        #     self.dataset,
+        #     batch_size=self.config.batch_size,
+        #     shuffle=True,
+        #     num_workers=0,  # Start with 0 to debug
+        #     pin_memory=False
+        # )
         # Create dataloaders
+
+        print("   Initializing epoch samples...")
+        if hasattr(self.dataset, '_resample_epoch'):
+            self.dataset._resample_epoch()
+            print(f"   ✓ Epoch samples ready: {len(self.dataset.epoch_samples)} samples")
+        
+        
         self.train_loader = DataLoader(
             self.dataset,
             batch_sampler=DiverseBatchSampler(self.dataset, self.config.batch_size),
-            num_workers=2,  # Reduced for memory
+            num_workers=0,  # Reduced for memory
             pin_memory=True
         )
+        diagnose_dataloader(self.train_loader, self.dataset)
+
+        print(f"   ✓ Train loader created with {len(self.train_loader)} batches")
+
+        try:
+            test_batch = next(iter(self.train_loader))
+            print(f"   ✓ Test batch successful: {test_batch['input'].shape}")
+        except StopIteration:
+            print("   ❌ ERROR: DataLoader is empty!")
+        except Exception as e:
+            print(f"   ❌ ERROR: {e}")
         
         # Validation uses simple sequential sampling
         self.val_loader = DataLoader(
@@ -1390,105 +1643,251 @@ class HybridSamplingTrainer:
         self.target_normalizer.fit(all_targets_clean)
         
         print(f"   ✅ Normalizers fitted on {len(all_features)} samples")
+
+        print(f"\n   🔍 Normalizer diagnostics:")
+        print(f"   Feature normalizer type: {type(self.feature_normalizer).__name__}")
+        print(f"   Feature scales:")
+        for i, feat_name in enumerate(self.config.input_features):
+            if hasattr(self.feature_normalizer, 'scale_'):
+                scale = self.feature_normalizer.scale_[i]
+                center = self.feature_normalizer.center_[i]
+                print(f"     {feat_name}: center={center:.3f}, scale={scale:.3f}")
     
+    # def train_epoch(self, model, optimizer, criterion):
+    #     """Train one epoch with gradient accumulation and robust NaN handling"""
+    #     model.train()
+    #     epoch_losses = []
+    #     accumulated_loss = 0
+        
+    #     # Tracking
+    #     nan_input_count = 0
+    #     nan_pred_count = 0
+    #     nan_loss_count = 0
+    #     valid_batch_count = 0
+        
+    #     for batch_idx, batch in enumerate(self.train_loader):
+    #         # Move to device
+    #         inputs = batch['input'].to(self.device)
+    #         targets = batch['target'].to(self.device)
+            
+    #         # Normalize inputs
+    #         batch_size, seq_len, num_nodes, num_features = inputs.size()
+    #         inputs_flat = inputs.view(-1, num_features).cpu().numpy()
+            
+    #         # Check for extreme values before normalization
+    #         if batch_idx == 0:  # Debug first batch
+    #             for i, feat_name in enumerate(self.config.input_features):
+    #                 feat_data = inputs_flat[:, i]
+    #                 valid_data = feat_data[~np.isnan(feat_data)]
+    #                 if len(valid_data) > 0:
+    #                     if valid_data.max() > 1e6 or valid_data.min() < -1e6:
+    #                         print(f"   ⚠️  Extreme values in {feat_name}: [{valid_data.min():.1e}, {valid_data.max():.1e}]")
+            
+    #         inputs_norm = self.feature_normalizer.transform(inputs_flat)
+    #         inputs_norm = np.nan_to_num(inputs_norm, nan=0.0, posinf=0.0, neginf=0.0)
+    #         inputs = torch.tensor(inputs_norm, dtype=torch.float32, device=self.device)
+    #         inputs = inputs.view(batch_size, seq_len, num_nodes, num_features)
+            
+    #         # Normalize targets
+    #         targets_flat = targets.view(-1, 3).cpu().numpy()
+    #         targets_norm = self.target_normalizer.transform_targets(targets_flat)
+    #         targets_norm = np.nan_to_num(targets_norm, nan=0.0, posinf=0.0, neginf=0.0)
+    #         targets = torch.tensor(targets_norm, dtype=torch.float32, device=self.device)
+    #         targets = targets.view(batch_size, num_nodes, 4)
+
+    #         # Forward pass
+    #         try:
+    #             predictions = model(inputs, self.edge_index, self.edge_attr, self.edge_slices)
+    #         except RuntimeError as e:
+    #             print(f"   ❌ Model forward pass failed at batch {batch_idx}: {e}")
+    #             continue
+            
+    #         # Check for NaN in predictions
+    #         if torch.isnan(predictions).any():
+    #             nan_pred_count += 1
+    #             if batch_idx < 5:  # Only print first few
+    #                 print(f"   ⚠️  NaN in predictions at batch {batch_idx}")
+    #                 print(f"      Input stats: min={inputs.min():.3f}, max={inputs.max():.3f}, mean={inputs.mean():.3f}")
+    #             continue
+            
+    #         # Compute loss with gradient accumulation
+    #         loss_dict = criterion(predictions, targets)
+    #         loss = loss_dict['total_loss'] / self.config.accumulation_steps
+            
+    #         # Check for NaN/inf loss
+    #         if torch.isnan(loss) or torch.isinf(loss):
+    #             nan_loss_count += 1
+    #             if batch_idx < 5:  # Only print first few
+    #                 print(f"   ⚠️  NaN/inf loss at batch {batch_idx}: {loss.item()}")
+    #                 print(f"      Component losses - SWH: {loss_dict['swh_loss'].item():.4f}, "
+    #                       f"MWD: {loss_dict['mwd_loss'].item():.4f}, MWP: {loss_dict['mwp_loss'].item():.4f}")
+    #             continue
+            
+    #         # Backward pass
+    #         loss.backward()
+    #         accumulated_loss += loss.item()
+    #         valid_batch_count += 1
+            
+    #         # Update weights after accumulation steps
+    #         if (batch_idx + 1) % self.config.accumulation_steps == 0:
+    #             # Check for NaN gradients before clipping
+    #             has_nan_grad = False
+    #             for name, param in model.named_parameters():
+    #                 if param.grad is not None and torch.isnan(param.grad).any():
+    #                     has_nan_grad = True
+    #                     if batch_idx < 5:
+    #                         print(f"   ⚠️  NaN gradient in {name}")
+    #                     break
+                
+    #             if has_nan_grad:
+    #                 optimizer.zero_grad()
+    #                 accumulated_loss = 0
+    #                 continue
+                
+    #             torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.gradient_clip_norm)
+    #             optimizer.step()
+    #             optimizer.zero_grad()
+                
+    #             if accumulated_loss > 0:
+    #                 epoch_losses.append(accumulated_loss * self.config.accumulation_steps)
+    #             accumulated_loss = 0
+                
+    #             if batch_idx % (10 * self.config.accumulation_steps) == 0 and len(epoch_losses) > 0:
+    #                 print(f"   Batch {batch_idx}/{len(self.train_loader)}: "
+    #                       f"Loss={epoch_losses[-1]:.4f} (Valid: {valid_batch_count} batches)")
+        
+    #     # Handle any remaining gradients
+    #     if accumulated_loss > 0 and valid_batch_count > 0:
+    #         torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.gradient_clip_norm)
+    #         optimizer.step()
+    #         optimizer.zero_grad()
+        
+    #     # Print summary
+    #     total_batches = len(self.train_loader)
+    #     print(f"\n   Epoch summary:")
+    #     print(f"   - Valid batches: {valid_batch_count}/{total_batches}")
+    #     if nan_input_count > 0:
+    #         print(f"   - NaN input batches: {nan_input_count}")
+    #     if nan_pred_count > 0:
+    #         print(f"   - NaN prediction batches: {nan_pred_count}")
+    #     if nan_loss_count > 0:
+    #         print(f"   - NaN/inf loss batches: {nan_loss_count}")
+        
+    #     return np.mean(epoch_losses) if epoch_losses else float('inf')
+
     def train_epoch(self, model, optimizer, criterion):
-        """Train one epoch with gradient accumulation and robust NaN handling"""
+        """Diagnostic version of train_epoch to identify inf/nan sources"""
         model.train()
         epoch_losses = []
         accumulated_loss = 0
         
-        # Tracking
-        nan_input_count = 0
-        nan_pred_count = 0
-        nan_loss_count = 0
-        valid_batch_count = 0
+        # Detailed tracking
+        batch_stats = {
+            'total': 0,
+            'valid': 0,
+            'nan_after_norm': 0,
+            'inf_after_norm': 0,
+            'nan_predictions': 0,
+            'inf_loss': 0,
+            'nan_loss': 0,
+            'loss_magnitudes': []
+        }
         
         for batch_idx, batch in enumerate(self.train_loader):
+            batch_stats['total'] += 1
+            
             # Move to device
             inputs = batch['input'].to(self.device)
             targets = batch['target'].to(self.device)
             
-            # Skip if batch has NaN
-            if torch.isnan(inputs).any() or torch.isnan(targets).any():
-                nan_input_count += 1
-                if batch_idx < 5:  # Only print first few
-                    print(f"   ⚠️  NaN in raw data at batch {batch_idx}")
-                continue
+            # Check raw data stats
+            if batch_idx < 3:  # First few batches
+                print(f"\n   Batch {batch_idx} raw data:")
+                print(f"     Input shape: {inputs.shape}")
+                print(f"     Input range: [{inputs.min():.3f}, {inputs.max():.3f}]")
+                print(f"     Target range: [{targets.min():.3f}, {targets.max():.3f}]")
             
             # Normalize inputs
             batch_size, seq_len, num_nodes, num_features = inputs.size()
             inputs_flat = inputs.view(-1, num_features).cpu().numpy()
             
             # Check for extreme values before normalization
-            if batch_idx == 0:  # Debug first batch
+            if batch_idx < 3:
                 for i, feat_name in enumerate(self.config.input_features):
                     feat_data = inputs_flat[:, i]
-                    valid_data = feat_data[~np.isnan(feat_data)]
-                    if len(valid_data) > 0:
-                        if valid_data.max() > 1e6 or valid_data.min() < -1e6:
-                            print(f"   ⚠️  Extreme values in {feat_name}: [{valid_data.min():.1e}, {valid_data.max():.1e}]")
+                    if np.abs(feat_data).max() > 1e6:
+                        print(f"     ⚠️  Large values in {feat_name}: max={feat_data.max():.1e}")
             
-            inputs_norm = self.feature_normalizer.transform(inputs_flat)
-            inputs_norm = np.nan_to_num(inputs_norm, nan=0.0, posinf=0.0, neginf=0.0)
+            # Apply normalization with safety checks
+            try:
+                inputs_norm = self.feature_normalizer.transform(inputs_flat)
+                
+                # Check normalized data
+                if np.isnan(inputs_norm).any():
+                    batch_stats['nan_after_norm'] += 1
+                    inputs_norm = np.nan_to_num(inputs_norm, nan=0.0)
+                
+                if np.isinf(inputs_norm).any():
+                    batch_stats['inf_after_norm'] += 1
+                    inputs_norm = np.nan_to_num(inputs_norm, posinf=10.0, neginf=-10.0)
+                    
+            except Exception as e:
+                print(f"   ❌ Normalization error at batch {batch_idx}: {e}")
+                continue
+            
             inputs = torch.tensor(inputs_norm, dtype=torch.float32, device=self.device)
             inputs = inputs.view(batch_size, seq_len, num_nodes, num_features)
             
             # Normalize targets
             targets_flat = targets.view(-1, 3).cpu().numpy()
             targets_norm = self.target_normalizer.transform_targets(targets_flat)
-            targets_norm = np.nan_to_num(targets_norm, nan=0.0, posinf=0.0, neginf=0.0)
+            targets_norm = np.nan_to_num(targets_norm, nan=0.0, posinf=10.0, neginf=-10.0)
             targets = torch.tensor(targets_norm, dtype=torch.float32, device=self.device)
             targets = targets.view(batch_size, num_nodes, 4)
-
+            
             # Forward pass
             try:
                 predictions = model(inputs, self.edge_index, self.edge_attr, self.edge_slices)
+                
+                if torch.isnan(predictions).any():
+                    batch_stats['nan_predictions'] += 1
+                    if batch_idx < 3:
+                        print(f"     ⚠️  NaN in predictions!")
+                    continue
+                    
             except RuntimeError as e:
-                print(f"   ❌ Model forward pass failed at batch {batch_idx}: {e}")
+                print(f"   ❌ Model forward error at batch {batch_idx}: {e}")
                 continue
             
-            # Check for NaN in predictions
-            if torch.isnan(predictions).any():
-                nan_pred_count += 1
-                if batch_idx < 5:  # Only print first few
-                    print(f"   ⚠️  NaN in predictions at batch {batch_idx}")
-                    print(f"      Input stats: min={inputs.min():.3f}, max={inputs.max():.3f}, mean={inputs.mean():.3f}")
-                continue
-            
-            # Compute loss with gradient accumulation
+            # Compute loss
             loss_dict = criterion(predictions, targets)
             loss = loss_dict['total_loss'] / self.config.accumulation_steps
             
-            # Check for NaN/inf loss
-            if torch.isnan(loss) or torch.isinf(loss):
-                nan_loss_count += 1
-                if batch_idx < 5:  # Only print first few
-                    print(f"   ⚠️  NaN/inf loss at batch {batch_idx}: {loss.item()}")
-                    print(f"      Component losses - SWH: {loss_dict['swh_loss'].item():.4f}, "
-                          f"MWD: {loss_dict['mwd_loss'].item():.4f}, MWP: {loss_dict['mwp_loss'].item():.4f}")
+            # Check loss validity
+            if torch.isnan(loss):
+                batch_stats['nan_loss'] += 1
+                if batch_idx < 3:
+                    print(f"     ⚠️  NaN loss: {loss_dict}")
+                continue
+                
+            if torch.isinf(loss):
+                batch_stats['inf_loss'] += 1
+                if batch_idx < 3:
+                    print(f"     ⚠️  Inf loss: {loss_dict}")
                 continue
             
-            # Backward pass
+            # Track loss magnitude
+            loss_value = loss.item()
+            batch_stats['loss_magnitudes'].append(loss_value)
+            
+            # Valid batch - proceed with training
+            batch_stats['valid'] += 1
             loss.backward()
-            accumulated_loss += loss.item()
-            valid_batch_count += 1
+            accumulated_loss += loss_value
             
             # Update weights after accumulation steps
             if (batch_idx + 1) % self.config.accumulation_steps == 0:
-                # Check for NaN gradients before clipping
-                has_nan_grad = False
-                for name, param in model.named_parameters():
-                    if param.grad is not None and torch.isnan(param.grad).any():
-                        has_nan_grad = True
-                        if batch_idx < 5:
-                            print(f"   ⚠️  NaN gradient in {name}")
-                        break
-                
-                if has_nan_grad:
-                    optimizer.zero_grad()
-                    accumulated_loss = 0
-                    continue
-                
+                # Gradient clipping
                 torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.gradient_clip_norm)
                 optimizer.step()
                 optimizer.zero_grad()
@@ -1497,26 +1896,26 @@ class HybridSamplingTrainer:
                     epoch_losses.append(accumulated_loss * self.config.accumulation_steps)
                 accumulated_loss = 0
                 
-                if batch_idx % (10 * self.config.accumulation_steps) == 0 and len(epoch_losses) > 0:
+                # Progress update
+                if batch_idx % 20 == 0 and len(epoch_losses) > 0:
                     print(f"   Batch {batch_idx}/{len(self.train_loader)}: "
-                          f"Loss={epoch_losses[-1]:.4f} (Valid: {valid_batch_count} batches)")
+                        f"Loss={epoch_losses[-1]:.4f}")
         
-        # Handle any remaining gradients
-        if accumulated_loss > 0 and valid_batch_count > 0:
-            torch.nn.utils.clip_grad_norm_(model.parameters(), self.config.gradient_clip_norm)
-            optimizer.step()
-            optimizer.zero_grad()
+        # Print diagnostic summary
+        print(f"\n   🔍 Epoch diagnostic summary:")
+        print(f"      Total batches: {batch_stats['total']}")
+        print(f"      Valid batches: {batch_stats['valid']}")
+        print(f"      NaN after norm: {batch_stats['nan_after_norm']}")
+        print(f"      Inf after norm: {batch_stats['inf_after_norm']}")
+        print(f"      NaN predictions: {batch_stats['nan_predictions']}")
+        print(f"      NaN losses: {batch_stats['nan_loss']}")
+        print(f"      Inf losses: {batch_stats['inf_loss']}")
         
-        # Print summary
-        total_batches = len(self.train_loader)
-        print(f"\n   Epoch summary:")
-        print(f"   - Valid batches: {valid_batch_count}/{total_batches}")
-        if nan_input_count > 0:
-            print(f"   - NaN input batches: {nan_input_count}")
-        if nan_pred_count > 0:
-            print(f"   - NaN prediction batches: {nan_pred_count}")
-        if nan_loss_count > 0:
-            print(f"   - NaN/inf loss batches: {nan_loss_count}")
+        if batch_stats['loss_magnitudes']:
+            valid_losses = [l for l in batch_stats['loss_magnitudes'] if l < 1e6]
+            if valid_losses:
+                print(f"      Loss range: [{min(valid_losses):.4f}, {max(valid_losses):.4f}]")
+                print(f"      Mean loss: {np.mean(valid_losses):.4f}")
         
         return np.mean(epoch_losses) if epoch_losses else float('inf')
     

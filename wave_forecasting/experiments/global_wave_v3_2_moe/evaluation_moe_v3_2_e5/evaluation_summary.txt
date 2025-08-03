@@ -1,0 +1,91 @@
+GLOBAL WAVE MODEL V3.2 MOE EVALUATION REPORT
+==================================================
+
+Timestamp: 2025-08-01T13:49:30.561724
+Model Type: MultiscaleGlobalWaveGNN_V3.2_MoE
+Checkpoint: experiments/global_wave_v3_2_moe/E5.pt
+Data Files: 1
+
+MoE Configuration:
+  Experts: 8
+  Active experts: 2
+  Expert hidden dim: 256
+
+
+GLOBAL METRICS
+------------------------------
+
+SWH:
+  mae: 1.5590
+  rmse: 1.8594
+  bias: -1.5468
+  std_error: 1.0318
+  correlation: 0.6868
+  n_valid: 161159.0000
+  pred_min: 0.03
+  pred_max: 1.06
+  pred_mean: 0.5834
+  pred_std: 0.2904
+  true_min: 0.00
+  true_max: 10.38
+  true_mean: 2.1302
+  true_std: 1.2095
+  mape: 73.1888
+  nrmse: 87.2878
+
+MWD:
+  mae: 64.6328
+  rmse: 82.9987
+  correlation: 0.4159
+  n_valid: 161159.0000
+  pred_min: 0.00
+  pred_max: 360.00
+  pred_mean: 145.9570
+  pred_std: 115.9455
+  true_min: 0.00
+  true_max: 359.87
+  true_mean: 178.9311
+  true_std: 102.8556
+
+MWP:
+  mae: 6.1312
+  rmse: 6.4396
+  bias: -6.1023
+  std_error: 2.0569
+  correlation: 0.4771
+  n_valid: 161159.0000
+  pred_min: 0.08
+  pred_max: 2.73
+  pred_mean: 1.8301
+  pred_std: 0.6496
+  true_min: 0.00
+  true_max: 16.76
+  true_mean: 7.9324
+  true_std: 2.2860
+  mape: 77.2931
+  nrmse: 81.1814
+
+
+REGIONAL PERFORMANCE (Top 5 per variable)
+------------------------------
+
+SWH - Best Regions:
+  1. South Pacific: RMSE=0.7570, MAE=0.3488
+  2. Tropics: RMSE=0.7765, MAE=0.4552
+  3. Tropical Pacific: RMSE=0.7961, MAE=0.4449
+  4. Tropical Atlantic: RMSE=0.8042, MAE=0.5240
+  5. High-Latitudes North: RMSE=0.8743, MAE=0.2795
+
+MWD - Best Regions:
+  1. High-Latitudes North: RMSE=25.8367, MAE=8.6784
+  2. Southern Ocean: RMSE=30.3931, MAE=16.0061
+  3. Arctic Ocean: RMSE=30.8804, MAE=11.3750
+  4. High-Latitudes South: RMSE=32.5957, MAE=14.8375
+  5. Mid-Latitudes North: RMSE=35.2223, MAE=14.7040
+
+MWP - Best Regions:
+  1. High-Latitudes North: RMSE=1.9538, MAE=0.7596
+  2. Arctic Ocean: RMSE=2.2037, MAE=0.9570
+  3. Mid-Latitudes North: RMSE=2.5488, MAE=1.2090
+  4. South Pacific: RMSE=3.0083, MAE=1.4594
+  5. High-Latitudes South: RMSE=3.0402, MAE=1.5945

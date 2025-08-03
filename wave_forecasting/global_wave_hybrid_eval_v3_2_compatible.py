@@ -1,0 +1,830 @@
+#!/usr/bin/env python3
+"""
+Global Wave Model Evaluation Script - V3.2 MoE Compatible Version
+Works with both V3.1 (non-MoE) and V3.2 (MoE) model checkpoints
+"""
+
+import os
+import sys
+import warnings
+from pathlib import Path
+from datetime import datetime
+from typing import Dict, List, Tuple, Optional, Any
+import json
+import pickle
+
+import numpy as np
+import torch
+import xarray as xr
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+from matplotlib.gridspec import GridSpec
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
+
+warnings.filterwarnings('ignore')
+
+# First, we need to handle the config loading issue
+class CheckpointLoader:
+    """Custom checkpoint loader that handles different config types"""
+    
+    @staticmethod
+    def load_checkpoint(checkpoint_path):
+        """Load checkpoint with proper handling of custom classes"""
+        # First try to determine the checkpoint type
+        try:
+            # Try loading just to peek at the structure
+            with open(checkpoint_path, 'rb') as f:
+                # Use a custom unpickler that won't fail on missing classes
+                class ConfigUnpickler(pickle.Unpickler):
+                    def find_class(self, module, name):
+                        # If it's a config class, create a dummy one
+                        if 'Config' in name:
+                            # Return dict as a placeholder
+                            return type(name, (), {})
+                        return super().find_class(module, name)
+                
+                # This will give us a rough idea of what's in the checkpoint
+                temp_data = torch.load(checkpoint_path, map_location='cpu', 
+                                     pickle_module=type('DummyPickle', (), {
+                                         'Unpickler': ConfigUnpickler,
+                                         'load': lambda f: ConfigUnpickler(f).load()
+                                     })())
+        except:
+            pass
+        
+        # Now try to import the right module and load properly
+        checkpoint = None
+        is_moe = False
+        
+        # Try MoE version first
+        try:
+            # Import MoE version
+            # /Users/rw/Code/wave_forecasting/wave_forecasting/global_wave_model_moe_v3_2.py
+            from global_wave_model_moe_v3_2 import (
+                MultiscaleGlobalWaveGNNMoE,
+                MultiscaleGlobalIcosahedralMesh,
+                BathymetryEnabledHybridSamplingDataset,
+                HybridSamplingMoEConfig,
+                VariableSpecificNormalizer,
+                CircularNormalizer,
+                MultiscaleMessageLayer,
+                SpatialAttention
+            )
+            
+            # Make classes available globally for unpickling
+            globals()['HybridSamplingMoEConfig'] = HybridSamplingMoEConfig
+            globals()['MultiscaleGlobalWaveGNNMoE'] = MultiscaleGlobalWaveGNNMoE
+            globals()['MultiscaleGlobalIcosahedralMesh'] = MultiscaleGlobalIcosahedralMesh
+            globals()['BathymetryEnabledHybridSamplingDataset'] = BathymetryEnabledHybridSamplingDataset
+            globals()['VariableSpecificNormalizer'] = VariableSpecificNormalizer
+            globals()['CircularNormalizer'] = CircularNormalizer
+            globals()['MultiscaleMessageLayer'] = MultiscaleMessageLayer
+            globals()['SpatialAttention'] = SpatialAttention
+            
+            # Also make available in sys.modules
+            sys.modules['__main__'].HybridSamplingMoEConfig = HybridSamplingMoEConfig
+            
+            # Try loading
+            checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+            
+            # Check if it's actually an MoE model
+            if hasattr(checkpoint.get('config', {}), 'num_experts'):
+                is_moe = True
+                print("✅ Loaded MoE checkpoint")
+                # Create aliases for compatibility
+                globals()['HybridSamplingConfig'] = HybridSamplingMoEConfig
+                globals()['MultiscaleGlobalWaveGNN'] = MultiscaleGlobalWaveGNNMoE
+            else:
+                # It's a V3.1 checkpoint, but we loaded it with MoE imports
+                is_moe = False
+                print("✅ Loaded non-MoE checkpoint (using MoE imports for compatibility)")
+        except Exception as e:
+            print(f"⚠️  Failed to load with MoE imports: {e}")
+            
+            # Fall back to V3.1
+            try:
+                from global_wave_model_hybrid_sampling_v3_1 import (
+                    MultiscaleGlobalWaveGNN,
+                    MultiscaleGlobalIcosahedralMesh,
+                    BathymetryEnabledHybridSamplingDataset,
+                    HybridSamplingConfig,
+                    VariableSpecificNormalizer,
+                    CircularNormalizer,
+                    MultiscaleMessageLayer,
+                    SpatialAttention
+                )
+                
+                # Make classes available globally
+                globals()['HybridSamplingConfig'] = HybridSamplingConfig
+                globals()['MultiscaleGlobalWaveGNN'] = MultiscaleGlobalWaveGNN
+                globals()['MultiscaleGlobalIcosahedralMesh'] = MultiscaleGlobalIcosahedralMesh
+                globals()['BathymetryEnabledHybridSamplingDataset'] = BathymetryEnabledHybridSamplingDataset
+                globals()['VariableSpecificNormalizer'] = VariableSpecificNormalizer
+                globals()['CircularNormalizer'] = CircularNormalizer
+                globals()['MultiscaleMessageLayer'] = MultiscaleMessageLayer
+                globals()['SpatialAttention'] = SpatialAttention
+                
+                sys.modules['__main__'].HybridSamplingConfig = HybridSamplingConfig
+                
+                checkpoint = torch.load(checkpoint_path, map_location='cpu', weights_only=False)
+                is_moe = False
+                print("✅ Loaded non-MoE checkpoint")
+            except Exception as e:
+                print(f"❌ Failed to load checkpoint: {e}")
+                raise
+        
+        return checkpoint, is_moe
+
+
+class CircularMetrics:
+    """Compute metrics for circular variables like wave direction"""
+    
+    @staticmethod
+    def angular_distance(pred_deg, true_deg):
+        """Compute angular distance in degrees"""
+        diff = pred_deg - true_deg
+        # Wrap to [-180, 180]
+        diff = (diff + 180) % 360 - 180
+        return np.abs(diff)
+    
+    @staticmethod
+    def circular_mae(pred_deg, true_deg):
+        """Mean absolute error for circular variables"""
+        return np.mean(CircularMetrics.angular_distance(pred_deg, true_deg))
+    
+    @staticmethod
+    def circular_rmse(pred_deg, true_deg):
+        """RMSE for circular variables"""
+        angular_dist = CircularMetrics.angular_distance(pred_deg, true_deg)
+        return np.sqrt(np.mean(angular_dist ** 2))
+
+
+class RegionalEvaluator:
+    """Evaluate model performance by geographic region"""
+    
+    def __init__(self):
+        # Define evaluation regions
+        self.regions = {
+            # Major ocean basins
+            'North Atlantic': {'lat': (20, 70), 'lon': (-80, 0)},
+            'South Atlantic': {'lat': (-60, 20), 'lon': (-70, 20)},
+            'North Pacific': {'lat': (20, 60), 'lon': (120, 240)},
+            'South Pacific': {'lat': (-60, 20), 'lon': (150, 290)},
+            'Indian Ocean': {'lat': (-60, 30), 'lon': (20, 120)},
+            'Southern Ocean': {'lat': (-90, -45), 'lon': (0, 360)},
+            'Arctic Ocean': {'lat': (70, 90), 'lon': (0, 360)},
+            'Mediterranean': {'lat': (30, 45), 'lon': (-5, 40)},
+            
+            # Specific forecast regions
+            'Tropical Atlantic': {'lat': (-20, 20), 'lon': (-60, 20)},
+            'Tropical Pacific': {'lat': (-20, 20), 'lon': (120, 280)},
+            'North Sea': {'lat': (50, 62), 'lon': (-5, 10)},
+            'Caribbean': {'lat': (10, 30), 'lon': (-90, -60)},
+            
+            # Latitude bands
+            'Tropics': {'lat': (-23.5, 23.5), 'lon': (0, 360)},
+            'Mid-Latitudes North': {'lat': (23.5, 60), 'lon': (0, 360)},
+            'Mid-Latitudes South': {'lat': (-60, -23.5), 'lon': (0, 360)},
+            'High-Latitudes North': {'lat': (60, 90), 'lon': (0, 360)},
+            'High-Latitudes South': {'lat': (-90, -60), 'lon': (0, 360)},
+        }
+    
+    def get_region_mask(self, lats, lons, region_name):
+        """Get boolean mask for a specific region"""
+        if region_name not in self.regions:
+            raise ValueError(f"Unknown region: {region_name}")
+        
+        region = self.regions[region_name]
+        lat_bounds = region['lat']
+        lon_bounds = region['lon']
+        
+        # Handle longitude wraparound
+        if lon_bounds[0] > lon_bounds[1]:  # Crosses 0 meridian
+            lon_mask = (lons >= lon_bounds[0]) | (lons <= lon_bounds[1])
+        else:
+            lon_mask = (lons >= lon_bounds[0]) & (lons <= lon_bounds[1])
+        
+        lat_mask = (lats >= lat_bounds[0]) & (lats <= lat_bounds[1])
+        
+        return lat_mask & lon_mask
+    
+    def evaluate_by_region(self, predictions, targets, lats, lons, metrics_dict):
+        """Compute metrics for each geographic region"""
+        regional_results = {}
+        
+        for region_name in self.regions:
+            mask = self.get_region_mask(lats, lons, region_name)
+            
+            if mask.sum() == 0:  # No points in region
+                continue
+            
+            regional_results[region_name] = {}
+            
+            # Apply mask and compute metrics
+            for var_idx, var_name in enumerate(['swh', 'mwd', 'mwp']):
+                pred_var = predictions[:, var_idx][mask]
+                true_var = targets[:, var_idx][mask]
+                
+                if var_name == 'mwd':
+                    # Special handling for circular variable
+                    mae = CircularMetrics.circular_mae(pred_var, true_var)
+                    rmse = CircularMetrics.circular_rmse(pred_var, true_var)
+                else:
+                    mae = mean_absolute_error(true_var, pred_var)
+                    rmse = np.sqrt(mean_squared_error(true_var, pred_var))
+                
+                regional_results[region_name][f'{var_name}_mae'] = mae
+                regional_results[region_name][f'{var_name}_rmse'] = rmse
+                
+                # Compute relative error for non-directional variables
+                if var_name != 'mwd':
+                    mean_true = np.mean(true_var)
+                    if mean_true > 0:
+                        regional_results[region_name][f'{var_name}_mape'] = mae / mean_true * 100
+            
+            regional_results[region_name]['n_points'] = int(mask.sum())
+        
+        return regional_results
+
+
+class GlobalWaveEvaluatorV3:
+    """Main evaluation class for global wave model V3 - works with both MoE and non-MoE versions"""
+    
+    def __init__(self, checkpoint_path: str, data_paths: List[str], output_dir: str = "evaluation_results"):
+        self.checkpoint_path = Path(checkpoint_path)
+        self.data_paths = [Path(p) for p in data_paths]  # Support multiple files
+        self.output_dir = Path(output_dir)
+        self.output_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Load checkpoint using custom loader
+        print(f"📂 Loading checkpoint: {checkpoint_path}")
+        self.checkpoint, self.is_moe = CheckpointLoader.load_checkpoint(checkpoint_path)
+        
+        # Extract components
+        self.config = self.checkpoint['config']
+        self.feature_normalizer = self.checkpoint['feature_normalizer']
+        self.target_normalizer = self.checkpoint['target_normalizer']
+        self.edge_index = self.checkpoint['edge_index']
+        self.edge_attr = self.checkpoint['edge_attr']
+        
+        # Handle edge slices for multiscale model
+        self.edge_slices = self.checkpoint.get('edge_slices', {})
+        
+        # Device setup
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 
+                                  'mps' if torch.backends.mps.is_available() else 'cpu')
+        
+        # Regional evaluator
+        self.regional_evaluator = RegionalEvaluator()
+        
+        print(f"✅ Checkpoint loaded successfully")
+        print(f"🖥️  Device: {self.device}")
+        print(f"📊 Model type: {'MoE' if self.is_moe else 'Standard'} with {len(self.edge_slices)} edge types")
+        if self.is_moe:
+            print(f"   MoE configuration: {self.config.num_experts} experts, top-{self.config.num_active_experts}")
+    
+    def load_model(self):
+        """Load model from checkpoint - handles both MoE and non-MoE versions"""
+        if self.is_moe:
+            print("   🔗 Loading MoE model with regional experts")
+            
+            # Get mesh coordinates from checkpoint
+            mesh_lats = self.checkpoint.get('mesh_lats')
+            mesh_lons = self.checkpoint.get('mesh_lons')
+            
+            if mesh_lats is None or mesh_lons is None:
+                # Recreate mesh to get coordinates
+                print("   ⚠️  Mesh coordinates not in checkpoint, recreating mesh...")
+                mesh = globals()['MultiscaleGlobalIcosahedralMesh'](
+                    refinement_level=self.config.mesh_refinement_level,
+                    config=self.config,
+                    cache_dir=self.config.cache_dir
+                )
+                mesh_lats, mesh_lons = mesh.vertices_to_lat_lon()
+            
+            model = globals()['MultiscaleGlobalWaveGNNMoE'](self.config, mesh_lats, mesh_lons)
+        else:
+            print("   🔗 Loading standard multiscale model")
+            model = globals()['MultiscaleGlobalWaveGNN'](self.config)
+        
+        model.load_state_dict(self.checkpoint['model_state_dict'])
+        model = model.to(self.device)
+        model.eval()
+        
+        print(f"   ✅ Model loaded: {sum(p.numel() for p in model.parameters()):,} parameters")
+        
+        return model
+    
+    def prepare_validation_data(self, max_samples: Optional[int] = None):
+        """Prepare validation dataset using hybrid sampling"""
+        print(f"\n📊 Loading validation data from {len(self.data_paths)} files")
+        
+        # Recreate mesh with same configuration
+        mesh = globals()['MultiscaleGlobalIcosahedralMesh'](
+            refinement_level=self.config.mesh_refinement_level,
+            config=self.config,
+            cache_dir=self.config.cache_dir
+        )
+        
+        # Create dataset with bathymetry support
+        dataset = globals()['BathymetryEnabledHybridSamplingDataset'](
+            data_paths=[str(p) for p in self.data_paths],
+            mesh=mesh,
+            config=self.config,
+            gebco_path="data/gebco/GEBCO_2023.nc"  # Add bathymetry if available
+        )
+        
+        # Limit samples if requested (for quick testing)
+        if max_samples is not None:
+            dataset.config.samples_per_epoch = min(max_samples, dataset.total_available_sequences)
+            dataset._resample_epoch()
+        
+        print(f"   ✅ Dataset ready: {len(dataset)} samples")
+        if hasattr(dataset, 'ocean_mask') and dataset.ocean_mask is not None:
+            ocean_nodes = dataset.ocean_mask.sum()
+            print(f"   🌊 Ocean nodes: {ocean_nodes:,}/{len(dataset.ocean_mask):,} ({ocean_nodes/len(dataset.ocean_mask)*100:.1f}%)")
+        
+        return dataset, mesh
+    
+    def evaluate_full_dataset(self, model, dataset, mesh, batch_size: int = 4):
+        """Run evaluation on full dataset"""
+        print(f"\n🔄 Running full dataset evaluation...")
+        
+        # Get mesh coordinates
+        mesh_lats, mesh_lons = mesh.vertices_to_lat_lon()
+        
+        # Storage for results
+        all_predictions = []
+        all_targets = []
+        
+        # Track MoE statistics if applicable
+        if self.is_moe:
+            expert_usage_counts = np.zeros(self.config.num_experts)
+        
+        # Process in batches
+        dataloader = torch.utils.data.DataLoader(
+            dataset, 
+            batch_size=batch_size,
+            shuffle=False,
+            num_workers=0  # Important for hybrid sampling
+        )
+        
+        with torch.no_grad():
+            for batch_idx, batch in enumerate(dataloader):
+                if batch_idx % 10 == 0:
+                    print(f"   Processing batch {batch_idx}/{len(dataloader)}")
+                
+                # Move to device
+                inputs = batch['input'].to(self.device)
+                targets = batch['single_step_target'].to(self.device)  # Use single step target
+                
+                # Normalize inputs
+                batch_size, seq_len, num_nodes, num_features = inputs.size()
+                inputs_flat = inputs.view(-1, num_features).cpu().numpy()
+                inputs_norm = self.feature_normalizer.transform(inputs_flat)
+                inputs = torch.tensor(inputs_norm, dtype=torch.float32, device=self.device)
+                inputs = inputs.view(batch_size, seq_len, num_nodes, num_features)
+                
+                # Forward pass with multiscale edges
+                edge_index = self.edge_index.to(self.device)
+                edge_attr = self.edge_attr.to(self.device)
+                
+                if self.is_moe:
+                    # MoE model returns tuple
+                    predictions, moe_aux_loss = model(inputs, edge_index, edge_attr, self.edge_slices)
+                else:
+                    # Standard model returns tensor
+                    predictions = model(inputs, edge_index, edge_attr, self.edge_slices)
+                
+                # Denormalize predictions and targets
+                predictions_np = predictions.cpu().numpy()
+                targets_np = targets.cpu().numpy()
+                
+                for i in range(batch_size):
+                    # Denormalize predictions (4 features: SWH, MWD_cos, MWD_sin, MWP)
+                    pred_norm = predictions_np[i]  # [nodes, 4]
+                    pred_denorm = self.target_normalizer.inverse_transform_targets(pred_norm)
+                    all_predictions.append(pred_denorm)
+                    
+                    # Original targets (3 features: SWH, MWD, MWP)
+                    target_orig = targets_np[i]  # [nodes, 3]
+                    all_targets.append(target_orig)
+        
+        # Stack results
+        all_predictions = np.array(all_predictions)  # [n_samples, n_nodes, 3]
+        all_targets = np.array(all_targets)  # [n_samples, n_nodes, 3]
+        
+        print(f"✅ Evaluation complete: {all_predictions.shape[0]} samples")
+        
+        if self.is_moe and 'expert_usage_counts' in locals():
+            print(f"   Expert usage distribution: {expert_usage_counts / expert_usage_counts.sum() * 100}")
+        
+        return all_predictions, all_targets, mesh_lats, mesh_lons
+    
+    def compute_global_metrics(self, predictions, targets):
+        """Compute global metrics for each variable"""
+        metrics = {}
+        
+        for var_idx, var_name in enumerate(['swh', 'mwd', 'mwp']):
+            pred = predictions[:, :, var_idx].flatten()
+            true = targets[:, :, var_idx].flatten()
+            
+            # Remove NaN values and zeros (land nodes)
+            valid_mask = ~(np.isnan(pred) | np.isnan(true)) & (true != 0)
+            pred = pred[valid_mask]
+            true = true[valid_mask]
+            
+            if len(pred) == 0:
+                print(f"   ⚠️  No valid data for {var_name}")
+                continue
+            
+            # Print prediction range to diagnose underprediction
+            print(f"\n   {var_name.upper()} prediction range: [{pred.min():.2f}, {pred.max():.2f}]")
+            print(f"   {var_name.upper()} true range: [{true.min():.2f}, {true.max():.2f}]")
+            
+            if var_name == 'mwd':
+                # Circular metrics
+                mae = CircularMetrics.circular_mae(pred, true)
+                rmse = CircularMetrics.circular_rmse(pred, true)
+                bias = None  # Not meaningful for circular
+                std_error = None
+            else:
+                mae = mean_absolute_error(true, pred)
+                rmse = np.sqrt(mean_squared_error(true, pred))
+                bias = np.mean(pred - true)
+                std_error = np.std(pred - true)
+            
+            metrics[var_name] = {
+                'mae': mae,
+                'rmse': rmse,
+                'bias': bias,
+                'std_error': std_error,
+                'correlation': np.corrcoef(pred, true)[0, 1] if len(pred) > 1 else 0.0,
+                'n_valid': len(pred),
+                'pred_min': pred.min(),
+                'pred_max': pred.max(),
+                'pred_mean': pred.mean(),
+                'pred_std': pred.std(),
+                'true_min': true.min(),
+                'true_max': true.max(),
+                'true_mean': true.mean(),
+                'true_std': true.std()
+            }
+            
+            # Add relative metrics for non-directional variables
+            if var_name != 'mwd':
+                mean_true = np.mean(true)
+                if mean_true > 0:
+                    metrics[var_name]['mape'] = mae / mean_true * 100
+                    metrics[var_name]['nrmse'] = rmse / mean_true * 100
+        
+        return metrics
+    
+    def plot_regional_performance(self, regional_results, save_path: Optional[str] = None):
+        """Create visualization of regional performance"""
+        fig = plt.figure(figsize=(20, 12))
+        gs = GridSpec(3, 3, figure=fig, hspace=0.3, wspace=0.3)
+        
+        # Color maps for each variable
+        cmaps = {'swh': 'Blues_r', 'mwd': 'RdYlBu_r', 'mwp': 'Greens_r'}
+        
+        for var_idx, var_name in enumerate(['swh', 'mwd', 'mwp']):
+            # Extract RMSE for each region
+            region_rmse = {}
+            for region, metrics in regional_results.items():
+                if f'{var_name}_rmse' in metrics:
+                    region_rmse[region] = metrics[f'{var_name}_rmse']
+            
+            if not region_rmse:
+                continue
+            
+            # Create subplot
+            ax = fig.add_subplot(gs[var_idx, :2], projection=ccrs.Robinson())
+            ax.set_global()
+            ax.add_feature(cfeature.LAND, color='lightgray')
+            ax.add_feature(cfeature.OCEAN, color='white')
+            ax.add_feature(cfeature.COASTLINE, linewidth=0.5)
+            ax.gridlines(draw_labels=False, alpha=0.3)
+            
+            # Plot regions with color based on RMSE
+            vmin = min(region_rmse.values())
+            vmax = max(region_rmse.values())
+            
+            for region_name, rmse in region_rmse.items():
+                if region_name in self.regional_evaluator.regions:
+                    region_def = self.regional_evaluator.regions[region_name]
+                    lat_bounds = region_def['lat']
+                    lon_bounds = region_def['lon']
+                    
+                    # Create region rectangle
+                    if lon_bounds[0] > lon_bounds[1]:  # Crosses dateline
+                        # Split into two rectangles
+                        rect1 = plt.Rectangle((lon_bounds[0], lat_bounds[0]), 
+                                            360 - lon_bounds[0], 
+                                            lat_bounds[1] - lat_bounds[0],
+                                            transform=ccrs.PlateCarree(),
+                                            facecolor=plt.cm.get_cmap(cmaps[var_name])((rmse - vmin) / (vmax - vmin)),
+                                            edgecolor='black',
+                                            alpha=0.7,
+                                            linewidth=0.5)
+                        rect2 = plt.Rectangle((0, lat_bounds[0]), 
+                                            lon_bounds[1], 
+                                            lat_bounds[1] - lat_bounds[0],
+                                            transform=ccrs.PlateCarree(),
+                                            facecolor=plt.cm.get_cmap(cmaps[var_name])((rmse - vmin) / (vmax - vmin)),
+                                            edgecolor='black',
+                                            alpha=0.7,
+                                            linewidth=0.5)
+                        ax.add_patch(rect1)
+                        ax.add_patch(rect2)
+                    else:
+                        rect = plt.Rectangle((lon_bounds[0], lat_bounds[0]), 
+                                           lon_bounds[1] - lon_bounds[0], 
+                                           lat_bounds[1] - lat_bounds[0],
+                                           transform=ccrs.PlateCarree(),
+                                           facecolor=plt.cm.get_cmap(cmaps[var_name])((rmse - vmin) / (vmax - vmin)),
+                                           edgecolor='black',
+                                           alpha=0.7,
+                                           linewidth=0.5)
+                        ax.add_patch(rect)
+            
+            # Add colorbar
+            sm = plt.cm.ScalarMappable(cmap=plt.cm.get_cmap(cmaps[var_name]), 
+                                      norm=plt.Normalize(vmin=vmin, vmax=vmax))
+            sm.set_array([])
+            cbar = plt.colorbar(sm, ax=ax, orientation='horizontal', pad=0.05, shrink=0.8)
+            cbar.set_label(f'{var_name.upper()} RMSE', fontsize=12)
+            
+            ax.set_title(f'{var_name.upper()} Regional Performance', fontsize=14, pad=10)
+            
+            # Create bar chart for top/bottom regions
+            ax_bar = fig.add_subplot(gs[var_idx, 2])
+            
+            # Sort regions by RMSE
+            sorted_regions = sorted(region_rmse.items(), key=lambda x: x[1])
+            top_5 = sorted_regions[:5]
+            bottom_5 = sorted_regions[-5:]
+            
+            regions = [r[0] for r in top_5] + ['...'] + [r[0] for r in bottom_5]
+            values = [r[1] for r in top_5] + [0] + [r[1] for r in bottom_5]
+            colors = ['green'] * 5 + ['white'] + ['red'] * 5
+            
+            y_pos = np.arange(len(regions))
+            ax_bar.barh(y_pos, values, color=colors, alpha=0.7)
+            ax_bar.set_yticks(y_pos)
+            ax_bar.set_yticklabels(regions, fontsize=10)
+            ax_bar.set_xlabel(f'{var_name.upper()} RMSE')
+            ax_bar.set_title(f'Best/Worst Regions', fontsize=12)
+            ax_bar.grid(axis='x', alpha=0.3)
+        
+        model_type = 'MoE' if self.is_moe else 'Standard'
+        plt.suptitle(f'Regional Model Performance - V3.2 {model_type}', fontsize=16, y=0.98)
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        else:
+            plt.savefig(self.output_dir / 'regional_performance.png', dpi=300, bbox_inches='tight')
+        plt.close()
+    
+    def plot_scatter_comparisons(self, predictions, targets, save_path: Optional[str] = None):
+        """Create scatter plots comparing predictions vs targets"""
+        fig, axes = plt.subplots(1, 3, figsize=(15, 5))
+        
+        for var_idx, (var_name, ax) in enumerate(zip(['swh', 'mwd', 'mwp'], axes)):
+            # Flatten and sample data
+            pred = predictions[:, :, var_idx].flatten()
+            true = targets[:, :, var_idx].flatten()
+            
+            # Remove NaN and zeros (land nodes)
+            valid_mask = ~(np.isnan(pred) | np.isnan(true)) & (true != 0)
+            pred = pred[valid_mask]
+            true = true[valid_mask]
+            
+            if len(pred) == 0:
+                ax.text(0.5, 0.5, f'No valid {var_name.upper()} data', 
+                       ha='center', va='center', transform=ax.transAxes)
+                continue
+            
+            # Sample if too many points
+            if len(pred) > 10000:
+                idx = np.random.choice(len(pred), 10000, replace=False)
+                pred = pred[idx]
+                true = true[idx]
+            
+            # Create scatter plot
+            ax.scatter(true, pred, alpha=0.5, s=1)
+            
+            # Add diagonal line
+            lims = [min(true.min(), pred.min()), max(true.max(), pred.max())]
+            ax.plot(lims, lims, 'r--', alpha=0.8, linewidth=2)
+            
+            # Add metrics
+            if var_name == 'mwd':
+                mae = CircularMetrics.circular_mae(pred, true)
+                rmse = CircularMetrics.circular_rmse(pred, true)
+            else:
+                mae = mean_absolute_error(true, pred)
+                rmse = np.sqrt(mean_squared_error(true, pred))
+            
+            corr = np.corrcoef(pred, true)[0, 1] if len(pred) > 1 else 0.0
+            
+            # Add range info
+            textstr = f'MAE: {mae:.3f}\nRMSE: {rmse:.3f}\nCorr: {corr:.3f}\n'
+            textstr += f'Pred range: [{pred.min():.1f}, {pred.max():.1f}]\n'
+            textstr += f'True range: [{true.min():.1f}, {true.max():.1f}]'
+            
+            ax.text(0.05, 0.95, textstr, transform=ax.transAxes, fontsize=10,
+                   verticalalignment='top', bbox=dict(boxstyle='round', facecolor='wheat', alpha=0.5))
+            
+            ax.set_xlabel(f'True {var_name.upper()}')
+            ax.set_ylabel(f'Predicted {var_name.upper()}')
+            ax.set_title(f'{var_name.upper()} Predictions vs Truth')
+            ax.grid(True, alpha=0.3)
+        
+        plt.tight_layout()
+        
+        if save_path:
+            plt.savefig(save_path, dpi=300, bbox_inches='tight')
+        else:
+            plt.savefig(self.output_dir / 'scatter_comparisons.png', dpi=300, bbox_inches='tight')
+        plt.close()
+    
+    def save_metrics_report(self, global_metrics, regional_results):
+        """Save comprehensive metrics report"""
+        model_type = 'MoE' if self.is_moe else 'Standard'
+        
+        report = {
+            'evaluation_timestamp': datetime.now().isoformat(),
+            'checkpoint_path': str(self.checkpoint_path),
+            'data_paths': [str(p) for p in self.data_paths],
+            'model_type': f'MultiscaleGlobalWaveGNN_V3.2_{model_type}',
+            'is_moe': self.is_moe,
+            'global_metrics': global_metrics,
+            'regional_results': regional_results
+        }
+        
+        if self.is_moe:
+            report['moe_config'] = {
+                'num_experts': self.config.num_experts,
+                'num_active_experts': self.config.num_active_experts,
+                'moe_hidden_dim': self.config.moe_hidden_dim
+            }
+        
+        # Save as JSON (convert numpy types to Python types)
+        def convert_to_serializable(obj):
+            if isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {k: convert_to_serializable(v) for k, v in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_to_serializable(v) for v in obj]
+            return obj
+        
+        serializable_report = convert_to_serializable(report)
+        
+        with open(self.output_dir / 'evaluation_report.json', 'w') as f:
+            json.dump(serializable_report, f, indent=2)
+        
+        # Create readable text report
+        with open(self.output_dir / 'evaluation_summary.txt', 'w') as f:
+            f.write(f"GLOBAL WAVE MODEL V3.2 {model_type.upper()} EVALUATION REPORT\n")
+            f.write("=" * 50 + "\n\n")
+            f.write(f"Timestamp: {report['evaluation_timestamp']}\n")
+            f.write(f"Model Type: {report['model_type']}\n")
+            f.write(f"Checkpoint: {report['checkpoint_path']}\n")
+            f.write(f"Data Files: {len(report['data_paths'])}\n")
+            
+            if self.is_moe:
+                f.write(f"\nMoE Configuration:\n")
+                f.write(f"  Experts: {report['moe_config']['num_experts']}\n")
+                f.write(f"  Active experts: {report['moe_config']['num_active_experts']}\n")
+                f.write(f"  Expert hidden dim: {report['moe_config']['moe_hidden_dim']}\n")
+            
+            f.write("\n\nGLOBAL METRICS\n")
+            f.write("-" * 30 + "\n")
+            for var_name, metrics in global_metrics.items():
+                f.write(f"\n{var_name.upper()}:\n")
+                for metric_name, value in metrics.items():
+                    if value is not None:
+                        if metric_name in ['pred_min', 'pred_max', 'true_min', 'true_max']:
+                            f.write(f"  {metric_name}: {value:.2f}\n")
+                        else:
+                            f.write(f"  {metric_name}: {value:.4f}\n")
+            
+            f.write("\n\nREGIONAL PERFORMANCE (Top 5 per variable)\n")
+            f.write("-" * 30 + "\n")
+            
+            for var_name in ['swh', 'mwd', 'mwp']:
+                f.write(f"\n{var_name.upper()} - Best Regions:\n")
+                
+                # Sort regions by RMSE
+                region_rmse = []
+                for region, metrics in regional_results.items():
+                    if f'{var_name}_rmse' in metrics:
+                        region_rmse.append((region, metrics[f'{var_name}_rmse']))
+                
+                region_rmse.sort(key=lambda x: x[1])
+                
+                for i, (region, rmse) in enumerate(region_rmse[:5]):
+                    mae = regional_results[region][f'{var_name}_mae']
+                    f.write(f"  {i+1}. {region}: RMSE={rmse:.4f}, MAE={mae:.4f}\n")
+        
+        print(f"\n📊 Evaluation report saved to: {self.output_dir}")
+    
+    def run_complete_evaluation(self, max_samples: Optional[int] = None):
+        """Run complete evaluation pipeline"""
+        model_type = 'MoE' if self.is_moe else 'Standard'
+        print(f"\n🚀 Starting Global Wave Model V3.2 {model_type} Evaluation")
+        print("=" * 50)
+        
+        # Load model
+        model = self.load_model()
+        
+        # Prepare data
+        dataset, mesh = self.prepare_validation_data(max_samples=max_samples)
+        
+        # Run evaluation
+        predictions, targets, mesh_lats, mesh_lons = self.evaluate_full_dataset(
+            model, dataset, mesh
+        )
+        
+        # Compute global metrics
+        print("\n📊 Computing global metrics...")
+        global_metrics = self.compute_global_metrics(predictions, targets)
+        
+        print("\nGlobal Performance:")
+        for var_name, metrics in global_metrics.items():
+            print(f"\n{var_name.upper()}:")
+            for metric_name, value in metrics.items():
+                if value is not None:
+                    if isinstance(value, (int, np.integer)):
+                        print(f"  {metric_name}: {value:,}")
+                    elif metric_name in ['pred_min', 'pred_max', 'true_min', 'true_max']:
+                        print(f"  {metric_name}: {value:.2f}")
+                    else:
+                        print(f"  {metric_name}: {value:.4f}")
+        
+        # Compute regional metrics
+        print("\n🌍 Computing regional metrics...")
+        
+        # Flatten predictions and targets for regional analysis
+        all_pred_flat = predictions.reshape(-1, 3)
+        all_true_flat = targets.reshape(-1, 3)
+        all_lats_flat = np.tile(mesh_lats, predictions.shape[0])
+        all_lons_flat = np.tile(mesh_lons, predictions.shape[0])
+        
+        regional_results = self.regional_evaluator.evaluate_by_region(
+            all_pred_flat, all_true_flat, all_lats_flat, all_lons_flat, global_metrics
+        )
+        
+        # Create visualizations
+        print("\n📈 Creating visualizations...")
+        self.plot_regional_performance(regional_results)
+        self.plot_scatter_comparisons(predictions, targets)
+        
+        # Save report
+        self.save_metrics_report(global_metrics, regional_results)
+        
+        print("\n✅ Evaluation complete!")
+        print(f"   Results saved to: {self.output_dir}")
+        
+        return global_metrics, regional_results
+
+
+def main():
+    """Main evaluation function"""
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='Evaluate Global Wave Model V3.2 (MoE Compatible)')
+    parser.add_argument('--checkpoint', type=str, required=True,
+                       help='Path to model checkpoint')
+    parser.add_argument('--data', type=str, nargs='+', required=True,
+                       help='Path(s) to validation data (NetCDF files)')
+    parser.add_argument('--output_dir', type=str, default='evaluation_results_v3_2',
+                       help='Output directory for results')
+    parser.add_argument('--max_samples', type=int, default=None,
+                       help='Maximum number of samples to evaluate (for quick testing)')
+    
+    args = parser.parse_args()
+    
+    # Create evaluator
+    evaluator = GlobalWaveEvaluatorV3(
+        checkpoint_path=args.checkpoint,
+        data_paths=args.data,
+        output_dir=args.output_dir
+    )
+    
+    # Run evaluation
+    evaluator.run_complete_evaluation(
+        max_samples=args.max_samples
+    )
+
+
+if __name__ == "__main__":
+    main()
